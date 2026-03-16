@@ -158,6 +158,7 @@ msm_drm-$(CONFIG_PANEL_GTACT4PRO_HX8279_TV101WUM_WUXGA) += samsung/PMIC/ss_buck_
 
 msm_drm-$(CONFIG_PANEL_NT36672C_TL066FVMC02_FHD) += samsung/NT36672C_TL066FVMC02/ss_dsi_panel_NT36672C_TL066FVMC02.o
 
+msm_drm-$(CONFIG_PANEL_S6E8FC1_AMS660XR01_HD) += samsung/S6E8FC1_AMS660XR01/ss_dsi_panel_S6E8FC1_AMS660XR01.o
 
 msm_drm-$(CONFIG_DISPLAY_SAMSUNG) += samsung/ss_dsi_panel_sysfs.o \
 	samsung/ss_dsi_panel_debug.o \
