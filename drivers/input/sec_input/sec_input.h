@@ -99,6 +99,7 @@ const struct file_operations ops_name = {				\
 #define INPUT_FEATURE_SUPPORT_MOTION_PALM			(1 << 20) /* rawdata motion control: palm */
 #define INPUT_FEATURE_SUPPORT_MOTION_AIVF			(1 << 21) /* rawdata motion control: aivf */
 
+#if IS_ENABLED(CONFIG_INPUT_SEC_INPUT)
 /*
  * sec Log
  */
@@ -211,6 +212,7 @@ const struct file_operations ops_name = {				\
 #define input_raw_info(mode, dev, fmt, ...) input_info(mode, dev, fmt, ## __VA_ARGS__)
 #define input_log_fix()	{}
 #define input_raw_data_clear() {}
+#endif
 #endif
 
 /*
