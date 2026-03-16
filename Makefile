@@ -1,55 +1,44 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
 # auto-detect subdirs
-ifeq ($(CONFIG_ARCH_SDXPOORWILLS), y)
-include $(srctree)/techpack/audio/config/sdxpoorwillsauto.conf
-export
-endif
-ifeq ($(CONFIG_ARCH_SM8150), y)
-include $(srctree)/techpack/audio/config/sm8150auto.conf
-export
-endif
-ifeq ($(CONFIG_ARCH_SDMSHRIKE), y)
-include $(srctree)/techpack/audio/config/sm8150auto.conf
-export
-endif
 ifeq ($(CONFIG_ARCH_KONA), y)
-include $(srctree)/techpack/audio/config/konaauto.conf
-endif
-ifeq ($(CONFIG_ARCH_SDM660), y)
-include $(srctree)/techpack/audio/config/sdm660auto.conf
+include $(srctree)/techpack/camera/config/konacamera.conf
 endif
 
+ifeq ($(CONFIG_ARCH_LITO), y)
+include $(srctree)/techpack/camera/config/litocamera.conf
+endif
+
+ifeq ($(CONFIG_ARCH_BENGAL), y)
+include $(srctree)/techpack/camera/config/bengalcamera.conf
+endif
+
+ifeq ($(CONFIG_ARCH_KONA), y)
+LINUXINCLUDE    += \
+		-include $(srctree)/techpack/camera/config/konacameraconf.h
+endif
+
+ifeq ($(CONFIG_ARCH_LITO), y)
+LINUXINCLUDE    += \
+		-include $(srctree)/techpack/camera/config/litocameraconf.h
+endif
+
+ifeq ($(CONFIG_ARCH_BENGAL), y)
+LINUXINCLUDE    += \
+		-include $(srctree)/techpack/camera/config/bengalcameraconf.h
+endif
+
+ifdef CONFIG_SPECTRA_CAMERA
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE     += \
-                -I$(srctree)/techpack/audio/include/uapi \
-                -I$(srctree)/techpack/audio/include
+                -I$(srctree)/techpack/camera/include/uapi
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
 LINUXINCLUDE    += \
-                -I$(srctree)/techpack/audio/include/uapi \
-                -I$(srctree)/techpack/audio/include
-
-ifeq ($(CONFIG_ARCH_SDXPOORWILLS), y)
-LINUXINCLUDE    += \
-                -include $(srctree)/techpack/audio/config/sdxpoorwillsautoconf.h
+                -I$(srctree)/techpack/camera/include/uapi \
+                -I$(srctree)/techpack/camera/include
+obj-y += drivers/
+else
+$(info Target not found)
 endif
-ifeq ($(CONFIG_ARCH_SM8150), y)
-LINUXINCLUDE    += \
-                -include $(srctree)/techpack/audio/config/sm8150autoconf.h
-endif
-ifeq ($(CONFIG_ARCH_SDMSHRIKE), y)
-LINUXINCLUDE    += \
-                -include $(srctree)/techpack/audio/config/sm8150autoconf.h
-endif
-ifeq ($(CONFIG_ARCH_KONA), y)
-LINUXINCLUDE    += \
-                -include $(srctree)/techpack/audio/config/konaautoconf.h
-endif
-ifeq ($(CONFIG_ARCH_SDM660), y)
-LINUXINCLUDE    += \
-                -include $(srctree)/techpack/audio/config/sdm660autoconf.h
-endif
-obj-y += soc/
-obj-y += dsp/
-obj-y += ipc/
-obj-y += asoc/
