@@ -1,24 +1,21 @@
 # UAPI Header export list
-
-ifeq ($(wildcard $(srctree)/arch/$(SRCARCH)/include/uapi/asm/a.out.h),)
-no-export-headers += a.out.h
-endif
-
-header-y += hbtp_input.h
-
-ifeq ($(wildcard $(srctree)/arch/$(SRCARCH)/include/uapi/asm/kvm.h),)
-no-export-headers += kvm.h
-endif
-
-ifeq ($(wildcard $(srctree)/arch/$(SRCARCH)/include/uapi/asm/kvm_para.h),)
-no-export-headers += kvm_para.h
-endif
-
-header-y += nfc/
-header-y += qbt_handler.h
-
-ifneq ($(VSERVICES_SUPPORT), "")
-include include/linux/Kbuild.vservices
-endif
-header-y += okl4-link-shbuf.h
-header-y += sockev.h
+header-y += avtimer.h
+header-y += msm_audio.h
+header-y += msm_audio_aac.h
+header-y += msm_audio_ac3.h
+header-y += msm_audio_amrnb.h
+header-y += msm_audio_amrwb.h
+header-y += msm_audio_amrwbplus.h
+header-y += msm_audio_calibration.h
+header-y += msm_audio_mvs.h
+header-y += msm_audio_qcp.h
+header-y += msm_audio_sbc.h
+header-y += msm_audio_voicememo.h
+header-y += msm_audio_wma.h
+header-y += msm_audio_wmapro.h
+header-y += msm_audio_alac.h
+header-y += msm_audio_ape.h
+header-y += msm_audio_g711.h
+header-y += msm_audio_g711_dec.h
+header-y += mfd/
+header-y += wcd-spi-ac-params.h
