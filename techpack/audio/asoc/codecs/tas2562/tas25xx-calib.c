@@ -201,4 +201,3 @@ void tas_calib_exit(void)
 MODULE_AUTHOR("Texas Instruments Inc.");
 MODULE_DESCRIPTION("TAS25XX Misc driver");
 MODULE_LICENSE("GPL v2");
-

@@ -26,4 +26,3 @@ int tas_calib_init(void);
 void tas_calib_exit(void);
 
 #endif /* _TAS25XX_CALIB_H */
-

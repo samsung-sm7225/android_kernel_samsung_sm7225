@@ -110,7 +110,7 @@ ssize_t flash_power_store(struct device *dev, struct device_attribute *attr, con
 
 	if(g_flash_ctrl == NULL){
 		return size;
-   	}
+	}
 
 	if ((buf == NULL) || kstrtouint(buf, 10, &value_u32)) {
 		return -1;
@@ -135,8 +135,8 @@ ssize_t flash_power_store(struct device *dev, struct device_attribute *attr, con
 			}
 		}
 
-        	if (i >= MAX_FLASHLIGHT_LEVEL)
-        	{
+		if (i >= MAX_FLASHLIGHT_LEVEL)
+		{
 			pr_err("%s: can't process, invalid value=%u\n", __func__, value_u32);
 		}
 	}
@@ -205,9 +205,9 @@ static ssize_t rear_type_show(struct device *dev,
 	char cam_type_sony[] = "SONY_IMX682\n";
 	char cam_type_lsi[] = "SLSI_S5KGW1P\n";
 
-	if (cam_fw_ver[4] == 'L') 
+	if (cam_fw_ver[4] == 'L')
 		rc = scnprintf(buf, PAGE_SIZE, "%s", cam_type_lsi);
-	else 
+	else
 		rc = scnprintf(buf, PAGE_SIZE, "%s", cam_type_sony);
 
 	if (rc)
@@ -307,9 +307,9 @@ static ssize_t front_camera_type_show(struct device *dev,
 	char cam_type_sony[] = "SONY_IMX616\n";
 	char cam_type_lsi[] = "SLSI_S5KGD2\n";
 
-	if (front_cam_fw_ver[4] == 'L') 
+	if (front_cam_fw_ver[4] == 'L')
 		rc = scnprintf(buf, PAGE_SIZE, "%s", cam_type_lsi);
-	else 
+	else
 		rc = scnprintf(buf, PAGE_SIZE, "%s", cam_type_sony);
 
 	if (rc)
@@ -1358,7 +1358,7 @@ static ssize_t rear4_mtf_exif_store(struct device *dev,
 	return size;
 
 }
-#endif 
+#endif
 
 char rear_mtf_exif[FROM_MTF_SIZE + 1] = "\0";
 static ssize_t rear_mtf_exif_show(struct device *dev,
@@ -1859,9 +1859,9 @@ static ssize_t rear2_type_show(struct device *dev,
 	char cam_type_hynix[] = "HYNIX_HI1336\n";
 	char cam_type_lsi[] = "SLSI_S5K3L6\n";
 
-	if (cam2_fw_ver[4] == 'L') 
+	if (cam2_fw_ver[4] == 'L')
 		rc = scnprintf(buf, PAGE_SIZE, "%s", cam_type_lsi);
-	else 
+	else
 		rc = scnprintf(buf, PAGE_SIZE, "%s", cam_type_hynix);
 	if (rc)
 		return rc;
@@ -2275,9 +2275,9 @@ static ssize_t ois_power_store(struct device *dev, struct device_attribute *attr
 			pr_info("%s: [WARNING] ois is off, skip power down", __func__);
 			goto error;
 		}
-	
+
 		cam_ois_power_down(g_o_ctrl);
-	
+
 		isOisPoweredUp = 0;
 		pr_info("%s: power down", __func__);
 		break;
@@ -2796,7 +2796,7 @@ char supported_camera_ids[] = {
 #endif
 #if !defined(CONFIG_SEC_GTS7XLLITE_PROJECT) && !defined(CONFIG_SEC_GTS7XLLITEWIFI_PROJECT)
 	50, //REAR_2ND = Rear UW
-#endif	
+#endif
 /*#if defined(CONFIG_SAMSUNG_FRONT_DUAL)  //Disabling Front 8M for factory mode.
 	51, //FRONT_2ND = Front UW
 #endif */
@@ -2807,7 +2807,7 @@ char supported_camera_ids[] = {
 #endif
 #if defined(CONFIG_SEC_A42XQ_PROJECT) || defined(CONFIG_SEC_A51XQ_PROJECT) || defined(CONFIG_SEC_A52XQ_PROJECT) || defined(CONFIG_SEC_M62XQ_PROJECT) || defined(CONFIG_SEC_M52XQ_PROJECT) || defined(CONFIG_SEC_M23XQ_PROJECT)
 	54, // Macro Sensor
-#endif	
+#endif
 #if defined(CONFIG_SAMSUNG_REAR_TOF)
 	80, //REAR_TOF
 #endif
@@ -4127,7 +4127,7 @@ static ssize_t front_tof_ae_value_show(struct device *dev,
 static ssize_t front_tof_ae_value_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
- 	uint32_t value = 0;
+	uint32_t value = 0;
 	uint32_t reg_data3, reg_data2, reg_data1, reg_data0 = 0;
 	uint32_t hmax = 0x02FE;
 
@@ -5339,7 +5339,7 @@ static int __init cam_sysfs_init(void)
 		pr_err("Failed to create device file!(%s)!\n",
 			dev_attr_rear4_moduleid.attr.name);
 		ret = -ENODEV;
-	}	
+	}
         if (sysfs_create_file(SVC, &dev_attr_SVC_rear_module4.attr) < 0) {
                 printk("Failed to create device file!(%s)!\n",
                         dev_attr_SVC_rear_module4.attr.name);
@@ -5384,7 +5384,7 @@ static int __init cam_sysfs_init(void)
         pr_err("Failed to create device file!(%s)!\n",
                 dev_attr_rear4_mtf_exif.attr.name);
         ret = -ENODEV;
-	}	
+	}
 	if (device_create_file(cam_dev_rear, &dev_attr_rear4_afcal) < 0) {
         pr_err("Failed to create device file!(%s)!\n",
                 dev_attr_rear4_afcal.attr.name);
@@ -5493,7 +5493,7 @@ static int __init cam_sysfs_init(void)
 		ret = -ENODEV;
 	}
         mutex_init(&ois_autotest_mutex);
-#endif	
+#endif
 
 #if defined(CONFIG_SAMSUNG_OIS_MCU_STM32)
 	if (device_create_file(cam_dev_ois, &dev_attr_ois_gain_rear) < 0) {

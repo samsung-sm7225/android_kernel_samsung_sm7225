@@ -257,4 +257,3 @@ int tas2562_deregister_misc(struct tas2562_priv *p_tas2562)
 MODULE_AUTHOR("Texas Instruments Inc.");
 MODULE_DESCRIPTION("TAS2562 Misc Smart Amplifier driver");
 MODULE_LICENSE("GPL v2");
-

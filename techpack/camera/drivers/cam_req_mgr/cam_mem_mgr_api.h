@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CAM_MEM_MGR_API_H_
@@ -96,8 +95,10 @@ int cam_mem_get_cpu_buf(int32_t buf_handle, uintptr_t *vaddr_ptr,
  *
  * @buf_handle: Handle for the buffer
  *
+ * @return Status of operation. Negative in case of error. Zero otherwise.
  */
-void cam_mem_put_cpu_buf(int32_t buf_handle);
+int cam_mem_put_cpu_buf(int32_t buf_handle);
+
 
 static inline bool cam_mem_is_secure_buf(int32_t buf_handle)
 {

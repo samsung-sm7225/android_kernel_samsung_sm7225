@@ -1237,4 +1237,3 @@ MODULE_AUTHOR("Texas Instruments Inc.");
 MODULE_DESCRIPTION("TAS2562 I2C Smart Amplifier driver");
 MODULE_LICENSE("GPL v2");
 #endif
-

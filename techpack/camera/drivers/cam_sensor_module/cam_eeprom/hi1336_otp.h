@@ -439,4 +439,3 @@ struct cam_sensor_i2c_reg_array hi1336_otp_finish_reg2[] = {
 };
 
 #endif /* HI1336_OTP_H */
-

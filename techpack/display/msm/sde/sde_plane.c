@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2014-2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (C) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -37,6 +37,14 @@
 #include "sde_vbif.h"
 #include "sde_plane.h"
 #include "sde_color_processing.h"
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+#include "sde_encoder.h"
+#include "ss_dsi_panel_common.h"
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
+#endif
 
 #define SDE_DEBUG_PLANE(pl, fmt, ...) SDE_DEBUG("plane%d " fmt,\
 		(pl) ? (pl)->base.base.id : -1, ##__VA_ARGS__)
@@ -127,7 +135,6 @@ struct sde_plane {
 	struct sde_csc_cfg *csc_usr_ptr;
 	struct sde_csc_cfg *csc_ptr;
 
-	uint32_t cached_lut_flag;
 	const struct sde_sspp_sub_blks *pipe_sblk;
 
 	char pipe_name[SDE_NAME_SIZE];
@@ -631,6 +638,16 @@ int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms)
 						PLANE_PROP_INPUT_FENCE));
 				psde->is_error = true;
 				sde_kms_timeline_status(plane->dev);
+#if defined(CONFIG_DISPLAY_SAMSUNG) && defined(CONFIG_SEC_DEBUG)
+				{
+					struct dma_fence *tout_fence = input_fence;
+
+					pr_info("DPCI Logging for fence timeout\n");
+					ss_inc_ftout_debug(tout_fence->ops->get_timeline_name(tout_fence));
+					BUG_ON(1);
+				}
+#endif
+
 				ret = -ETIMEDOUT;
 				break;
 			case -ERESTARTSYS:
@@ -3203,21 +3220,6 @@ static void _sde_plane_update_properties(struct drm_plane *plane,
 	pstate->dirty = 0x0;
 }
 
-static void _sde_plane_check_lut_dirty(struct sde_plane *psde,
-			struct sde_plane_state *pstate)
-{
-	/**
-	 * Valid configuration if scaler is not enabled or
-	 * lut flag is set
-	 */
-	if (pstate->scaler3_cfg.lut_flag || !pstate->scaler3_cfg.enable)
-		return;
-
-	pstate->scaler3_cfg.lut_flag = psde->cached_lut_flag;
-	SDE_EVT32(DRMID(&psde->base), pstate->scaler3_cfg.lut_flag,
-		SDE_EVTLOG_ERROR);
-}
-
 static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 				struct drm_plane_state *old_state)
 {
@@ -3268,16 +3270,10 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 			state->crtc_w, state->crtc_h,
 			state->crtc_x, state->crtc_y);
 
-	/* Caching the valid lut flag in sde plane */
-	if (pstate->scaler3_cfg.enable &&
-			pstate->scaler3_cfg.lut_flag)
-		psde->cached_lut_flag = pstate->scaler3_cfg.lut_flag;
-
 	/* force reprogramming of all the parameters, if the flag is set */
 	if (psde->revalidate) {
 		SDE_DEBUG("plane:%d - reconfigure all the parameters\n",
 				plane->base.id);
-		_sde_plane_check_lut_dirty(psde, pstate);
 		pstate->dirty = SDE_PLANE_DIRTY_ALL | SDE_PLANE_DIRTY_CP;
 		psde->revalidate = false;
 	}

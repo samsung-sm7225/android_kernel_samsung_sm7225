@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+<<<<<<< HEAD
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+=======
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+>>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
  */
 
 #define pr_fmt(fmt)	"sde_dbg:[%s] " fmt, __func__
@@ -17,6 +22,10 @@
 
 #include "sde_dbg.h"
 #include "sde_trace.h"
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+#include <linux/sched/clock.h>
+#endif
 
 #define SDE_EVTLOG_FILTER_STRSIZE	64
 
@@ -126,7 +135,11 @@ void sde_reglog_log(u8 blk_id, u32 val, u32 addr)
 static bool _sde_evtlog_dump_calc_range(struct sde_dbg_evtlog *evtlog,
 		bool update_last_entry, bool full_dump)
 {
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	int max_entries = full_dump ? SDE_EVTLOG_ENTRY : (SDE_EVTLOG_PRINT_ENTRY * 2);
+#else
 	int max_entries = full_dump ? SDE_EVTLOG_ENTRY : SDE_EVTLOG_PRINT_ENTRY;
+#endif
 
 	if (!evtlog)
 		return false;
@@ -345,6 +358,7 @@ void sde_evtlog_destroy(struct sde_dbg_evtlog *evtlog)
 		kfree(filter_node);
 	}
 	vfree(evtlog);
+<<<<<<< HEAD
 }
 
 void sde_reglog_destroy(struct sde_dbg_reglog *reglog)
@@ -353,4 +367,6 @@ void sde_reglog_destroy(struct sde_dbg_reglog *reglog)
 		return;
 
 	vfree(reglog);
+=======
+>>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
 }

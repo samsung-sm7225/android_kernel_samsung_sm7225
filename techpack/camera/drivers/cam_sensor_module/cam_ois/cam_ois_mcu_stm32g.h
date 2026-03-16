@@ -472,4 +472,3 @@ enum
 };
 
 #endif/* _CAM_OIS_MCU_STM32_H_ */
-

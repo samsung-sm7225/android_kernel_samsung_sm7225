@@ -70,4 +70,3 @@ module_exit(tfa98xx_sysfs_exit);
 
 MODULE_DESCRIPTION("ASoC TFA98XX sysfs node driver");
 MODULE_LICENSE("GPL");
-

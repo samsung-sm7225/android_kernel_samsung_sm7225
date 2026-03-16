@@ -69,4 +69,3 @@ void register_mbhc_jack_cb(struct snd_soc_component *component)
 	audio_register_mic_adc_cb(get_key_status);
 }
 EXPORT_SYMBOL_GPL(register_mbhc_jack_cb);
-

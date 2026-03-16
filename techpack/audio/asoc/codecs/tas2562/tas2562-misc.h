@@ -36,4 +36,3 @@ int tas2562_register_misc(struct tas2562_priv *p_tas2562);
 int tas2562_deregister_misc(struct tas2562_priv *p_tas2562);
 
 #endif /* _TAS2562_MISC_H */
-

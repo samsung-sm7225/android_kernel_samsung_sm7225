@@ -266,6 +266,8 @@ struct cam_camnoc_err_logger_info {
  * @ife_ubwc_stats: Register offset for ubwc stats
  * @IFE02_MAXWR_LOW: Register offset for IFE02
  * @IFE13_MAXWR_LOW: Register offset for IFE13
+ * @IFE01_MAXWR_LOW: Register offset for IFE01
+ * @IFE23_MAXWR_LOW: Register offset for IFE23
  */
 struct cam_camnoc_fifo_lvl_info {
 	uint32_t IFE0_nRDI_maxwr_offset;
@@ -276,7 +278,10 @@ struct cam_camnoc_fifo_lvl_info {
 	uint32_t ife_ubwc_stats;
 	uint32_t IFE02_MAXWR_LOW;
 	uint32_t IFE13_MAXWR_LOW;
+	uint32_t IFE01_MAXWR_LOW;
+	uint32_t IFE23_MAXWR_LOW;
 };
+
 
 /**
  * struct cam_camnoc_info : Overall CAMNOC settings info
@@ -288,7 +293,6 @@ struct cam_camnoc_fifo_lvl_info {
  * @irq_err_size: Array size of IRQ Error settings
  * @err_logger: Pointer to CAMNOC IRQ Error logger read registers
  * @errata_wa_list: HW Errata workaround info
- * @fill_level_register: Fill level registers
  *
  */
 struct cam_camnoc_info {

@@ -28,4 +28,3 @@ int tas256x_register_codec(struct tas256x_priv *p_tas256x);
 int tas256x_deregister_codec(struct tas256x_priv *p_tas256x);
 
 #endif /* _TAS256X_CODEC_H */
-

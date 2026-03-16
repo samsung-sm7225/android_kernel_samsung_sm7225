@@ -115,4 +115,3 @@ int tas25xx_smartamp_get_set(u8 *user_data, uint32_t param_id,
 	return ret;
 }
 EXPORT_SYMBOL(tas25xx_smartamp_get_set);
-

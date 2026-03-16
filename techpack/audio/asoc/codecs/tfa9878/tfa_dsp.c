@@ -8181,4 +8181,3 @@ EXPORT_SYMBOL(tfa_set_stc_gtable);
 #endif /* TFA_ENABLE_STC_TUNING */
 #endif /* TFA_USE_STC_VOLUME_TABLE */
 #endif /* TFA_USE_TFASTC_NODE */
-

@@ -79,4 +79,3 @@ struct tas25xx_algo {
 struct tas25xx_algo *smartamp_get_sysfs_ptr(void);
 
 #endif /* _TAS25XX_ALGO_H */
-

@@ -372,4 +372,3 @@ void tas_smartamp_remove_algo_controls(struct snd_soc_component *codec)
 	tas_calib_exit();
 }
 EXPORT_SYMBOL(tas_smartamp_remove_algo_controls);
-

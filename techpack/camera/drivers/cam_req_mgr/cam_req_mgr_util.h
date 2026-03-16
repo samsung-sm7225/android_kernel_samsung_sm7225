@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CAM_REQ_MGR_UTIL_API_H_
@@ -33,6 +32,7 @@ enum hdl_type {
 	HDL_TYPE_DEV = 1,
 	HDL_TYPE_SESSION,
 	HDL_TYPE_LINK
+
 };
 
 /**
@@ -49,6 +49,7 @@ struct handle {
 	uint32_t hdl_value;
 	enum hdl_type type;
 	enum hdl_state state;
+	uint64_t dev_id;
 	void *ops;
 	void *priv;
 };
@@ -79,6 +80,7 @@ struct cam_create_dev_hdl {
 	int32_t v4l2_sub_dev_flag;
 	int32_t media_entity_flag;
 	int32_t reserved;
+	uint64_t dev_id;
 	void *ops;
 	void *priv;
 };
@@ -118,6 +120,7 @@ int32_t cam_create_link_hdl(struct cam_create_dev_hdl *hdl_data);
 /**
  * cam_get_device_priv() - get private data of a device handle
  * @dev_hdl: handle for a device
+
  *
  * cam_req_mgr_core and KMD drivers use this function to
  * get private data of a handle. Returns a private data
@@ -144,6 +147,7 @@ struct cam_req_mgr_core_session *cam_get_session_priv(int32_t dev_hdl);
  * structure pointer.
  */
 struct cam_req_mgr_core_link *cam_get_link_priv(int32_t dev_hdl);
+
 
 /**
  * cam_get_device_ops() - get ops of a handle

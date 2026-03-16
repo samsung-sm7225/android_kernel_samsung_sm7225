@@ -179,7 +179,7 @@ int sysboot_connect(struct cam_ois_ctrl_t *o_ctrl)
 	}
 	/* STEP2. Send SYNC frame then waiting for ACK */
 	ret = ois_mcu_chip_command(o_ctrl, BOOT_I2C_CMD_SYNC);
-	
+
 	msleep(1);  // Need to add for MCU OIS suggested by yh1013.kim (FW engineer)
 
 	if (ret >= 0)
@@ -314,7 +314,7 @@ static int sysboot_i2c_wait_ack(struct cam_ois_ctrl_t *o_ctrl, unsigned long tim
 	int ret = 0;
 	uint32_t retry = 3;
 	unsigned char resp = 0;
-	
+
 //	timeout= timeout+jiffies;
 
 	while(retry--)
@@ -806,10 +806,10 @@ int sysboot_i2c_erase(struct cam_ois_ctrl_t *o_ctrl, uint32_t address, size_t le
 				continue;
 			}
 
-#if defined(CONFIG_SEC_A52XQ_PROJECT) || defined(CONFIG_SEC_M62XQ_PROJECT)		
+#if defined(CONFIG_SEC_A52XQ_PROJECT) || defined(CONFIG_SEC_M62XQ_PROJECT)
 			msleep(BOOT_I2C_PAGE_ERASE_TMOUT(erase.count + 1));    // added after discussion with yh1013.kim (FW engineer) for A52-5g case
 #endif
-			
+
 			/* wait for ACK response */
 			ret = sysboot_i2c_wait_ack(o_ctrl, BOOT_I2C_PAGE_ERASE_TMOUT(erase.count + 1));
 			if (ret < 0)
@@ -1975,7 +1975,7 @@ int32_t cam_ois_read_module_ver(struct cam_ois_ctrl_t *o_ctrl)
 	o_ctrl->module_ver[4] = data[4]; // FW release year
 	o_ctrl->module_ver[5] = data[5]; // FW release month
 	o_ctrl->module_ver[6] = data[6]; // FW release count
-	o_ctrl->module_ver[7] = data[7]; // Dev or Rel	
+	o_ctrl->module_ver[7] = data[7]; // Dev or Rel
 
 	for (i = 0; i < OIS_VER_SIZE; i++) {
 		if(!isalnum(o_ctrl->module_ver[i])) {
@@ -2216,7 +2216,7 @@ int cam_ois_shift_calibration(struct cam_ois_ctrl_t *o_ctrl, uint16_t af_positio
 	//ois cal info no shift data, 1byte?
 	//send af position both to wide and tele ?
 	//assume af position is only 1byte
- 	if (subdev_id == 0) {
+	if (subdev_id == 0) {
 		CAM_DBG(CAM_OIS, "write for WIDE %d", subdev_id);
 
 		rc = cam_ois_i2c_write(o_ctrl, 0x003A, af_position,
@@ -2531,11 +2531,11 @@ int32_t cam_ois_fw_update(struct cam_ois_ctrl_t *o_ctrl,
 	//sysboot_disconnect
 	sysboot_disconnect(o_ctrl);
 	/* write checkSum */
-	
+
 	CAM_DBG(CAM_OIS, "sysboot succeded");
-	
+
 	o_ctrl->io_master_info.client->addr = 0xC4;
-	
+
 	sendData[0] = (checkSum & 0x00FF);
 	sendData[1] = (checkSum & 0xFF00) >> 8;
 	sendData[2] = 0;
@@ -3109,7 +3109,7 @@ bool cam_ois_sine_wavecheck(struct cam_ois_ctrl_t *o_ctrl, int threshold,
 			CAMERA_SENSOR_I2C_TYPE_WORD, CAMERA_SENSOR_I2C_TYPE_BYTE); /* amplitude level for measurement. */
 		ret |= cam_ois_i2c_write(o_ctrl, 0x0056, 0x03,
 			CAMERA_SENSOR_I2C_TYPE_WORD, CAMERA_SENSOR_I2C_TYPE_BYTE); /* dummy pluse setting. */
-#else			
+#else
 	if (num_of_module == 1) {
 		ret |= cam_ois_i2c_write(o_ctrl, 0x0055, 0x34,
 			CAMERA_SENSOR_I2C_TYPE_WORD, CAMERA_SENSOR_I2C_TYPE_BYTE); /* amplitude level for measurement. */
@@ -3119,7 +3119,7 @@ bool cam_ois_sine_wavecheck(struct cam_ois_ctrl_t *o_ctrl, int threshold,
 		ret |= cam_ois_i2c_write(o_ctrl, 0x0056, 0x03,
 			CAMERA_SENSOR_I2C_TYPE_WORD, CAMERA_SENSOR_I2C_TYPE_BYTE); /* dummy pluse setting. */
 	}
-#endif	
+#endif
 	ret |= cam_ois_i2c_write(o_ctrl, 0x0057, 0x02,
 		CAMERA_SENSOR_I2C_TYPE_WORD, CAMERA_SENSOR_I2C_TYPE_BYTE); /* vyvle level for measurement. */
 	ret |= cam_ois_i2c_write(o_ctrl, 0x0050, 0x01,
@@ -3315,14 +3315,14 @@ FW_UPDATE_RETRY:
 	    ((strncmp(o_ctrl->phone_ver, "LFA1", OIS_MCU_VERSION_SIZE) == '\0')||   //Canvas2 OIS FW
              (strncmp(o_ctrl->phone_ver, "KBA1", OIS_MCU_VERSION_SIZE) == '\0'))) { //Canvas1 OIS FW
 	   CAM_INFO(CAM_OIS, "[OIS FW] force update(module %s, phone %s)", o_ctrl->module_ver, o_ctrl->phone_ver);
-  	   is_mcu_nack = true;
+	   is_mcu_nack = true;
 	}
 #elif defined(CONFIG_SEC_R8Q_PROJECT)
         //Below code checks whether sensor module OIS FW version is from Hubble, if so, then load right FW from phone
         if ((strncmp(o_ctrl->module_ver, "ML1M", OIS_MCU_VERSION_SIZE) == '\0') &&  //Y2 OIS FW
 	    (strncmp(o_ctrl->phone_ver, "NE4A", OIS_MCU_VERSION_SIZE) == '\0')) { //R8 OIS FW
 	   CAM_INFO(CAM_OIS, "[OIS FW] force update(module %s, phone %s)", o_ctrl->module_ver, o_ctrl->phone_ver);
-  	   is_mcu_nack = true;
+	   is_mcu_nack = true;
 	}
 #endif
 
@@ -3334,7 +3334,7 @@ FW_UPDATE_RETRY:
 	if(update_retries < 0){
 	    is_mcu_nack = false;
 	}
- 	if (!is_empty_cal_ver || is_mcu_nack == true) {
+	if (!is_empty_cal_ver || is_mcu_nack == true) {
 		if (strncmp(o_ctrl->phone_ver, o_ctrl->module_ver, OIS_MCU_VERSION_SIZE) == '\0' || is_mcu_nack == true) { //check if it is same hw (phone ver = module ver)
 			if ((strncmp(o_ctrl->phone_ver, o_ctrl->module_ver, OIS_VER_SIZE) > '\0')
 				|| is_force_update || is_mcu_nack == true) {
@@ -3390,7 +3390,7 @@ pwr_dwn:
 	cam_ois_power_down(o_ctrl);
 
 	if (is_need_retry)
-    {       
+    {
         CAM_DBG(CAM_OIS, "Re-try for FW update");
 		goto FW_UPDATE_RETRY;
     }

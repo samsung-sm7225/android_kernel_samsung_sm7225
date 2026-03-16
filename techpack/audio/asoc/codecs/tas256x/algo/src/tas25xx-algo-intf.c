@@ -75,4 +75,3 @@ int tas25xx_smartamp_algo_ctrl(u8 *user_data, uint32_t param_id,
 	return ret;
 }
 EXPORT_SYMBOL(tas25xx_smartamp_algo_ctrl);
-

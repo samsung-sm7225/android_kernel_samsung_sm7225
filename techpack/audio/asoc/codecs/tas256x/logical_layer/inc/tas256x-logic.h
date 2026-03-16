@@ -27,4 +27,3 @@ int tas256x_set_tdm_tx_slot(struct tas256x_priv *p_tas256x,
 	int slots, int slot_width);
 
 #endif /*__TAS256X_LOGIC_*/
-

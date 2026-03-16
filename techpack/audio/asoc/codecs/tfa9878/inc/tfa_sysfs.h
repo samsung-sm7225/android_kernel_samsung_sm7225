@@ -57,4 +57,3 @@ int tfa98xx_stc_init(struct class *tfa_class);
 void tfa98xx_stc_exit(struct class *tfa_class);
 
 #endif /* __TFA_SYSFS_INC__ */
-

@@ -1335,4 +1335,3 @@ MODULE_AUTHOR("Texas Instruments Inc.");
 MODULE_DESCRIPTION("TAS2562 ALSA SOC Smart Amplifier driver");
 MODULE_LICENSE("GPL v2");
 #endif /* CONFIG_TAS2562_CODEC */
-

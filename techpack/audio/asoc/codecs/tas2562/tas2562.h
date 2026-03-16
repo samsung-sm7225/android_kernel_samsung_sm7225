@@ -670,4 +670,3 @@ struct mutex file_lock;
 };
 
 #endif /* __TAS2562_ */
-

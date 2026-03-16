@@ -16,4 +16,3 @@ struct linux_platform {
 };
 
 #endif /*__TAS256X_REGMAP__*/
-

@@ -294,4 +294,3 @@ void tfa98xx_vval_exit(struct class *tfa_class)
 	device_destroy(tfa_class, DEV_ID_TFA_VVAL);
 	pr_info("exited\n");
 }
-

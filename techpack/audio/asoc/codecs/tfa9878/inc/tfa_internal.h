@@ -177,4 +177,3 @@ void tfa_set_stc_gtable(int idx, int *value);
 int tfa_wait_until_calibration_done(struct tfa_device *tfa);
 
 #endif /* __TFA_INTERNAL_H__ */
-

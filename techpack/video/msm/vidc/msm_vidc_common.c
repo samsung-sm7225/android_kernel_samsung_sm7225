@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/jiffies.h>
@@ -817,6 +817,7 @@ int msm_comm_get_inst_load(struct msm_vidc_inst *inst,
 	 *                 |          res * max(op, fps)|
 	 * ----------------|----------------------------|
 	 */
+
 	if (!is_supported_session(inst) ||
 		is_thumbnail_session(inst) ||
 		(!is_realtime_session(inst) &&
@@ -858,6 +859,7 @@ int msm_comm_get_device_load(struct msm_vidc_core *core,
 	list_for_each_entry(inst, &core->instances, list) {
 		if (inst->session_type != sess_type)
 			continue;
+
 		if (load_type == MSM_VIDC_VIDEO && !is_video_session(inst))
 			continue;
 		else if (load_type == MSM_VIDC_IMAGE && !is_grid_session(inst))
@@ -3073,6 +3075,7 @@ static int msm_comm_init_core(struct msm_vidc_inst *inst)
 	core->state = VIDC_CORE_INIT;
 	core->smmu_fault_handled = false;
 	core->trigger_ssr = false;
+	core->resources.max_inst_count = MAX_SUPPORTED_INSTANCES;
 	core->resources.max_secure_inst_count =
 		core->resources.max_secure_inst_count ?
 		core->resources.max_secure_inst_count :
@@ -3547,7 +3550,7 @@ static int msm_vidc_load_resources(int flipped_state,
 			video_load, max_video_load);
 		msm_vidc_print_running_insts(inst->core);
 		inst->supported = false;
-		return -ENOMEM;
+		return -EBUSY;
 	}
 
 	if (video_load + image_load > max_video_load + max_image_load) {
@@ -3555,8 +3558,8 @@ static int msm_vidc_load_resources(int flipped_state,
 			"H/W is overloaded. needed: [video + image][%d + %d], max: [video + image][%d + %d]\n",
 			video_load, image_load, max_video_load, max_image_load);
 		msm_vidc_print_running_insts(inst->core);
-		inst->supported = false;
-		return -ENOMEM;
+        inst->supported = false;
+		return -EBUSY;
 	}
 
 	hdev = core->device;
@@ -4857,7 +4860,7 @@ int msm_comm_qbufs_batch(struct msm_vidc_inst *inst,
 loop_end:
 		/* Queue pending buffers till batch size */
 		if (num_buffers_queued == inst->batch.size) {
-			s_vpr_l(inst->sid, "Queue buffers till batch size\n");
+			s_vpr_e(inst->sid, "%s: Queue buffers till batch size\n");
 			break;
 		}
 	}
@@ -5916,7 +5919,7 @@ int msm_comm_check_memory_supported(struct msm_vidc_inst *vidc_inst)
 			"%s: video mem overshoot - reached %llu MB, max_limit %llu MB\n",
 			__func__, total_mem_size >> 20, memory_limit_mbytes);
 		msm_comm_print_insts_info(core);
-		return -ENOMEM;
+		return -EBUSY;
 	}
 
 	if (!is_secure_session(vidc_inst)) {
@@ -5931,7 +5934,7 @@ int msm_comm_check_memory_supported(struct msm_vidc_inst *vidc_inst)
 				"%s: insufficient device addr space, required %llu, available %llu\n",
 				__func__, non_sec_mem_size, non_sec_cb_size);
 			msm_comm_print_insts_info(core);
-			return -ENOMEM;
+			return -EINVAL;
 		}
 	}
 
@@ -5963,7 +5966,7 @@ static int msm_vidc_check_mbps_supported(struct msm_vidc_inst *inst)
 				"H/W is overloaded. needed: %d max: %d\n",
 				video_load, max_video_load);
 			msm_vidc_print_running_insts(inst->core);
-			inst->supported = false;
+	    inst->supported = false;
 			return -EBUSY;
 		}
 
@@ -5973,7 +5976,7 @@ static int msm_vidc_check_mbps_supported(struct msm_vidc_inst *inst)
 				video_load, image_load,
 				max_video_load, max_image_load);
 			msm_vidc_print_running_insts(inst->core);
-			inst->supported = false;
+            inst->supported = false;
 			return -EBUSY;
 		}
 	}
@@ -6192,12 +6195,10 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 				width_min, height_min);
 			rc = -ENOTSUPP;
 		}
-		if (!rc && (output_width > width_max ||
-				output_height > height_max)) {
+		if (!rc && output_width > width_max) {
 			s_vpr_e(sid,
-				"Unsupported WxH (%u)x(%u), max supported is (%u)x(%u)\n",
-				output_width, output_height,
-				width_max, height_max);
+				"Unsupported width = %u supported max width = %u\n",
+				output_width, width_max);
 				rc = -ENOTSUPP;
 		}
 

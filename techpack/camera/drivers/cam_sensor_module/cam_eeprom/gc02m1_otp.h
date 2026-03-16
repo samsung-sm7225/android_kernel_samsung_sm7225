@@ -119,4 +119,3 @@ struct cam_sensor_i2c_reg_array finish_read_sensor_otp_reg[] = {
 };
 
 #endif /* GC02M1_OTP_H */
-

@@ -1202,4 +1202,3 @@ enum tfa98xx_error tfa_write_volume(struct tfa_device *tfa, int *sknt);
 }
 #endif
 #endif /* TFA_SERVICE_H */
-
