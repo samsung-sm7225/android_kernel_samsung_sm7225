@@ -491,6 +491,8 @@ moretofill:
 		if (qdf_nbuf_is_rx_ipa_smmu_map(rx_netbuf)) {
 			qdf_update_mem_map_table(pdev->osdev, &mem_map_table,
 						 paddr, HTT_RX_BUF_SIZE);
+			qdf_update_mem_map_table(pdev->osdev, &mem_map_table,
+						 paddr, HTT_RX_BUF_SIZE);
 			qdf_assert_always(
 				!cds_smmu_map_unmap(true, 1, &mem_map_table));
 		}
