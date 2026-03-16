@@ -1,6 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
-/*
- * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,10 +9,16 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * RMNET Data Smart Hash solution
+ *
  */
-#ifndef __SECDP_UNIT_TEST_H
-#define __SECDP_UNIT_TEST_H
 
-bool secdp_unit_test_edid_parse(void);
+#ifndef _RMNET_SHS_FREQ_H_
+#define _RMNET_SHS_FREQ_H_
 
-#endif/*__SECDP_UNIT_TEST_H*/
+int rmnet_shs_freq_init(void);
+int rmnet_shs_freq_exit(void);
+void rmnet_shs_boost_cpus(void);
+void rmnet_shs_reset_cpus(void);
+
+#endif
