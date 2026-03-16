@@ -236,8 +236,8 @@ struct wlan_cfg_dp_soc_ctxt {
 	bool lro_enabled;
 	bool sg_enabled;
 	bool gro_enabled;
-	bool tc_based_dynamic_gro;
-	uint32_t tc_ingress_prio;
+    bool tc_based_dynamic_gro;
+    uint32_t tc_ingress_prio;
 	bool ipa_enabled;
 	bool ol_tx_csum_enabled;
 	bool ol_rx_csum_enabled;
