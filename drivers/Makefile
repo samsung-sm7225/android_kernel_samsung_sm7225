@@ -207,7 +207,6 @@ obj-$(CONFIG_UH)        += uh/
 obj-$(CONFIG_SPU_VERIFY) += spu_verify/
 
 # OLOG
-obj-y				+= kperfmon/
 obj-y += security/samsung/icdrv/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += misc/drb/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += vibrator/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
@@ -215,6 +214,7 @@ obj-y += nfc/nfc_logger/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += security/samsung/five_tee_driver/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += sti/abc/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += muic/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += input/input_boost/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += security/samsung/tzic/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += perf_mgr/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
