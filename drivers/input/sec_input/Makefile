@@ -1,3 +1,11 @@
+ifneq ($(filter y,$(CONFIG_SEC_A42XQ_PROJECT) $(CONFIG_SEC_A52XQ_PROJECT)),)
+obj-$(CONFIG_INPUT_TOUCHSCREEN)         += common/sec_cmd.o
+obj-$(CONFIG_INPUT_TOUCHSCREEN_TCLMV2)  += common/sec_tclm_v2.o
+obj-$(CONFIG_INPUT_SEC_SECURE_TOUCH)    += common/sec_secure_touch.o
+obj-$(CONFIG_TOUCHSCREEN_DUMP_MODE)     += common/sec_tsp_dumpkey.o
+obj-$(CONFIG_SEC_DEBUG_TSP_LOG)         += common/sec_tsp_log.o
+obj-$(CONFIG_TOUCHSCREEN_DUAL_FOLDABLE) += common/sec_virtual_tsp.o
+else
 obj-$(CONFIG_SEC_DEBUG_TSP_LOG) += sec_tsp_log.o
 obj-$(CONFIG_INPUT_TOUCHSCREEN_TCLMV2)	+= sec_tclm_v2.o
 obj-$(CONFIG_INPUT_SEC_SECURE_TOUCH)	+= sec_secure_touch.o
@@ -29,3 +37,4 @@ GCOV_PROFILE_sec_common_fn.o := $(CONFIG_SEC_KUNIT)
 
 subdir-ccflags-$(CONFIG_SEC_KUNIT) += \
 	-Wno-format-zero-length
+endif
