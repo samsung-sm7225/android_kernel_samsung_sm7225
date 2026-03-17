@@ -69,10 +69,6 @@
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
 
-#ifdef CONFIG_SECURITY_DEFEX
-#include <linux/defex.h>
-#endif
-
 #include <linux/sec_debug.h>
 
 /*
@@ -838,9 +834,6 @@ void __noreturn do_exit(long code)
 	 * Then do everything else.
 	 */
 
-#ifdef CONFIG_SECURITY_DEFEX
-	task_defex_zero_creds(current);
-#endif
 	WARN_ON(blk_needs_flush_plug(tsk));
 
 	if (unlikely(in_interrupt()))
