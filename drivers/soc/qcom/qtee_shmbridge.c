@@ -2,7 +2,7 @@
 /*
  * QTI TEE shared memory bridge driver
  *
- * Copyright (c) 2019,2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -128,8 +128,7 @@ static int32_t qtee_shmbridge_enable(bool enable)
 	if (ret || desc.ret[0]) {
 		pr_err("Failed to enable shmbridge, rsp = %lld, ret = %d\n",
 			desc.ret[0], ret);
-		if (ret == -EOPNOTSUPP ||
-			desc.ret[0] == SHMBRIDGE_E_NOT_SUPPORTED)
+		if (ret == -EIO || desc.ret[0] == SHMBRIDGE_E_NOT_SUPPORTED)
 			pr_warn("shmbridge is not supported by this target\n");
 		return ret | desc.ret[0];
 	}
@@ -379,7 +378,7 @@ static int __init qtee_shmbridge_init(void)
 	INIT_LIST_HEAD(&bridge_list_head.head);
 
 	/* enable shm bridge mechanism */
-	ret = qtee_shmbridge_enable(true);
+	ret = qtee_shmbridge_enable(false);
 	if (ret) {
 		/* keep the mem pool and return if failed to enable bridge */
 		ret = 0;

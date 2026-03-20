@@ -91,7 +91,7 @@
 #define TWO 2
 #define QSEECOM_UFS_ICE_CE_NUM 10
 #define QSEECOM_SDCC_ICE_CE_NUM 20
-#define QSEECOM_ICE_FDE_KEY_INDEX 31
+#define QSEECOM_ICE_FDE_KEY_INDEX 0
 
 #define PHY_ADDR_4G	(1ULL<<32)
 
@@ -451,6 +451,66 @@ static int qseecom_query_ce_info(struct qseecom_dev_handle *data,
 static int __qseecom_unload_app(struct qseecom_dev_handle *data,
 				uint32_t app_id);
 
+#define CONFIG_HANDLE_LISTENER_EXIT
+#ifdef CONFIG_HANDLE_LISTENER_EXIT
+#include <linux/notifier.h>
+#include <linux/reboot.h>
+
+static void qseecom_handle_listener_exit(struct work_struct *unused)
+{
+	struct qseecom_registered_listener_list *ptr_svc = NULL;
+	int state = atomic_read(&qseecom.qseecom_state);
+
+	pr_warn("enter\n");
+
+	if (state != QSEECOM_STATE_READY) {
+		pr_warn("exit %d state\n", state);
+		return;
+	}
+	atomic_set(&qseecom.qseecom_state, QSEECOM_STATE_NOT_READY);
+
+	mutex_lock(&listener_access_lock);
+	list_for_each_entry(ptr_svc, &qseecom.registered_listener_list_head, list) {
+		/* stop CA thread waiting for listener response */
+		ptr_svc->abort = 1;
+		pr_warn("set abort flag for listener id %x\n", ptr_svc->svc.listener_id);
+	}
+	mutex_unlock(&listener_access_lock);
+	wake_up_interruptible_all(&qseecom.send_resp_wq);
+
+	pr_warn("exit\n");
+}
+
+static DECLARE_DELAYED_WORK(listener_exit_work, qseecom_handle_listener_exit);
+
+static int qseecom_reboot_notifier(struct notifier_block *nb,
+				unsigned long code, void *data)
+{
+	cancel_delayed_work_sync(&listener_exit_work);
+	schedule_delayed_work(&listener_exit_work, 3 * HZ);
+	pr_warn("mark listener exit after timeout\n");
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block qseecom_reboot_nb = {
+	.notifier_call = qseecom_reboot_notifier,
+};
+
+static ssize_t qseecom_sysfs_shutdown(struct kobject *kobj,
+				 struct kobj_attribute *attr,
+				 const char *buf, size_t count)
+{
+	schedule_delayed_work(&listener_exit_work, 30 * HZ);
+	pr_warn("mark listener exit after timeout\n");
+
+	return count;
+}
+
+static struct kobj_attribute qseecom_sysfs_attribute =
+	__ATTR(shutdown, 0660, NULL, qseecom_sysfs_shutdown);
+#endif
+
 static int get_qseecom_keymaster_status(char *str)
 {
 	get_option(&str, &qseecom.is_apps_region_protected);
@@ -704,7 +764,7 @@ static int qseecom_scm_call2(uint32_t svc_id, uint32_t tz_cmd_id,
 			qseecom.smcinvoke_support = true;
 			smc_id = TZ_OS_REGISTER_LISTENER_SMCINVOKE_ID;
 			ret = __qseecom_scm_call2_locked(smc_id, &desc);
-			if (ret == -EOPNOTSUPP) {
+			if (ret == -EIO) {
 				/* smcinvoke is not supported */
 				qseecom.smcinvoke_support = false;
 				smc_id = TZ_OS_REGISTER_LISTENER_ID;
@@ -2623,6 +2683,12 @@ err_resp:
 		case QSEOS_RESULT_CBACK_REQUEST:
 			pr_warn("get cback req app_id = %d, resp->data = %d\n",
 				data->client.app_id, resp->data);
+			resp->resp_type = SMCINVOKE_RESULT_INBOUND_REQ_NEEDED;
+			/* We are here because scm call sent to TZ has requested
+			 * for another callback request. This call has been a
+			 * success and hence setting result = 0
+			 */
+			resp->result = 0;
 			break;
 		default:
 			pr_err("fail:resp res= %d,app_id = %d,lstr = %d\n",
@@ -3080,9 +3146,23 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
 
 	pr_debug("unload app %d(%s), app_crash flag %d\n", data->client.app_id,
 			data->client.app_name, app_crash);
+    if (!memcmp(data->client.app_name, "dsms", strlen("dsms"))) {
+           pr_debug("Do not unload dsms app from tz\n");
+           goto unload_exit;
+    }
 
 	if (!memcmp(data->client.app_name, "keymaste", strlen("keymaste"))) {
 		pr_debug("Do not unload keymaster app from tz\n");
+		goto unload_exit;
+	}
+
+	if (!memcmp(data->client.app_name, "tz_iccc", strlen("tz_iccc"))) {
+		pr_debug("Do not unload tz_iccc app from tz\n");
+		goto unload_exit;
+	}
+
+	if (!memcmp(data->client.app_name, "tz_hdm", strlen("tz_hdm"))) {
+		pr_debug("Do not unload tz_hdm app from tz\n");
 		goto unload_exit;
 	}
 
@@ -3704,8 +3784,8 @@ static int __qseecom_send_cmd(struct qseecom_dev_handle *data,
 				(uint32_t)(__qseecom_uvirt_to_kphys(
 				data, (uintptr_t)req->resp_buf));
 		} else {
-			send_data_req.req_ptr = (uintptr_t)req->cmd_req_buf;
-			send_data_req.rsp_ptr = (uintptr_t)req->resp_buf;
+			send_data_req.req_ptr = (uint32_t)(uintptr_t)req->cmd_req_buf;
+			send_data_req.rsp_ptr = (uint32_t)(uintptr_t)req->resp_buf;
 		}
 
 		send_data_req.req_len = req->cmd_req_len;
@@ -4319,8 +4399,10 @@ static int __qseecom_send_modfd_cmd(struct qseecom_dev_handle *data,
 	struct qseecom_send_modfd_cmd_req req;
 	struct qseecom_send_cmd_req send_cmd_req;
 	void *origin_req_buf_kvirt, *origin_rsp_buf_kvirt;
+	u32 tzbuflen;
 	phys_addr_t pa;
 	u8 *va = NULL;
+	struct qtee_shm shm = {0};
 
 	ret = copy_from_user(&req, argp, sizeof(req));
 	if (ret) {
@@ -4352,11 +4434,11 @@ static int __qseecom_send_modfd_cmd(struct qseecom_dev_handle *data,
 				(uintptr_t)req.resp_buf);
 
 	/* Allocate kernel buffer for request and response*/
-	ret = __qseecom_alloc_coherent_buf(req.cmd_req_len + req.resp_len,
-					&va, &pa);
-	if (ret) {
-		pr_err("Failed to allocate coherent buf, ret %d\n", ret);
-		return ret;
+	tzbuflen = PAGE_ALIGN(req.cmd_req_len + req.resp_len);
+	va = __qseecom_alloc_tzbuf(tzbuflen, &pa, &shm);
+	if (!va) {
+		pr_err("error allocating in buffer\n");
+		return -ENOMEM;
 	}
 
 	req.cmd_req_buf = va;
@@ -4373,7 +4455,11 @@ static int __qseecom_send_modfd_cmd(struct qseecom_dev_handle *data,
 		ret = __qseecom_update_cmd_buf(&req, false, data);
 		if (ret)
 			goto out;
+
+		dmac_flush_range(req.cmd_req_buf, req.cmd_req_buf + tzbuflen);
 		ret = __qseecom_send_cmd(data, &send_cmd_req, true);
+		dmac_flush_range(req.cmd_req_buf, req.cmd_req_buf + tzbuflen);
+
 		if (ret)
 			goto out;
 		ret = __qseecom_update_cmd_buf(&req, true, data);
@@ -4383,7 +4469,11 @@ static int __qseecom_send_modfd_cmd(struct qseecom_dev_handle *data,
 		ret = __qseecom_update_cmd_buf_64(&req, false, data);
 		if (ret)
 			goto out;
+
+		dmac_flush_range(req.cmd_req_buf, req.cmd_req_buf + tzbuflen);
 		ret = __qseecom_send_cmd(data, &send_cmd_req, true);
+		dmac_flush_range(req.cmd_req_buf, req.cmd_req_buf + tzbuflen);
+
 		if (ret)
 			goto out;
 		ret = __qseecom_update_cmd_buf_64(&req, true, data);
@@ -4397,8 +4487,7 @@ static int __qseecom_send_modfd_cmd(struct qseecom_dev_handle *data,
 
 out:
 	if (req.cmd_req_buf)
-		__qseecom_free_coherent_buf(req.cmd_req_len + req.resp_len,
-			req.cmd_req_buf, (phys_addr_t)send_cmd_req.cmd_req_buf);
+		__qseecom_free_tzbuf(&shm);
 
 	return ret;
 }
@@ -5261,10 +5350,8 @@ int qseecom_send_command(struct qseecom_handle *handle, void *send_buf,
 		}
 		perf_enabled = true;
 	}
-	if (!strcmp(data->client.app_name, "securemm") ||
-	    !strcmp(data->client.app_name, "slateapp")) {
+	if (!strcmp(data->client.app_name, "securemm"))
 		data->use_legacy_cmd = true;
-	}
 
 	dmac_flush_range(req.cmd_req_buf, req.cmd_req_buf + req.cmd_req_len);
 
@@ -5366,8 +5453,8 @@ int qseecom_process_listener_from_smcinvoke(struct scm_desc *desc)
 		pr_err("Failed on cmd %d for lsnr %d session %d, ret = %d\n",
 			(int)desc->ret[0], (int)desc->ret[2],
 			(int)desc->ret[1], ret);
-	desc->ret[0] = resp.result;
-	desc->ret[1] = resp.resp_type;
+	desc->ret[0] = resp.resp_type;
+	desc->ret[1] = resp.result;
 	desc->ret[2] = resp.data;
 	return ret;
 }
@@ -6445,7 +6532,7 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
 	struct qseecom_create_key_req create_key_req;
 	struct qseecom_key_generate_ireq generate_key_ireq;
 	struct qseecom_key_select_ireq set_key_ireq;
-	uint32_t entries = 0;
+	int32_t entries = 0;
 
 	ret = copy_from_user(&create_key_req, argp, sizeof(create_key_req));
 	if (ret) {
@@ -6590,7 +6677,7 @@ static int qseecom_wipe_key(struct qseecom_dev_handle *data,
 	struct qseecom_wipe_key_req wipe_key_req;
 	struct qseecom_key_delete_ireq delete_key_ireq;
 	struct qseecom_key_select_ireq clear_key_ireq;
-	uint32_t entries = 0;
+	int32_t entries = 0;
 
 	ret = copy_from_user(&wipe_key_req, argp, sizeof(wipe_key_req));
 	if (ret) {
@@ -9559,6 +9646,10 @@ static int qseecom_probe(struct platform_device *pdev)
 {
 	int rc;
 
+#ifdef CONFIG_HANDLE_LISTENER_EXIT
+	struct kobject *qseecom_kobj;
+#endif
+
 	rc = qseecom_init_dev(pdev);
 	if (rc)
 		return rc;
@@ -9595,6 +9686,21 @@ static int qseecom_probe(struct platform_device *pdev)
 	if (rc)
 		goto exit_stop_kthreads;
 
+#ifdef CONFIG_HANDLE_LISTENER_EXIT
+	rc = register_reboot_notifier(&qseecom_reboot_nb);
+	if (rc)
+		pr_err("failed to register reboot notifier(%d)\n", rc);
+
+	qseecom_kobj = kobject_create_and_add("shutdown_qseecom", kernel_kobj);
+	if (!qseecom_kobj) {
+		pr_err("Unable to create kernel object");
+	} else {
+		rc = sysfs_create_file(qseecom_kobj, &qseecom_sysfs_attribute.attr);
+		if (rc)
+			pr_err("Unable to create qseecom sysfs file");
+	}
+#endif
+
 	atomic_set(&qseecom.qseecom_state, QSEECOM_STATE_READY);
 	return 0;
 
@@ -9621,6 +9727,11 @@ static int qseecom_remove(struct platform_device *pdev)
 	int ret = 0;
 
 	atomic_set(&qseecom.qseecom_state, QSEECOM_STATE_NOT_READY);
+
+#ifdef CONFIG_HANDLE_LISTENER_EXIT
+	cancel_delayed_work_sync(&listener_exit_work);
+#endif
+
 	spin_lock_irqsave(&qseecom.registered_kclient_list_lock, flags);
 
 	list_for_each_entry_safe(kclient, kclient_tmp,
@@ -9695,8 +9806,7 @@ static int qseecom_suspend(struct platform_device *pdev, pm_message_t state)
 
 	mutex_unlock(&clk_access_lock);
 	mutex_unlock(&qsee_bw_mutex);
-	if (qseecom.support_bus_scaling)
-		cancel_work_sync(&qseecom.bw_inactive_req_ws);
+	cancel_work_sync(&qseecom.bw_inactive_req_ws);
 
 	return 0;
 }

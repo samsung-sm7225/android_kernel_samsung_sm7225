@@ -1681,7 +1681,7 @@ enum {
 
 #undef SCHED_FEAT
 
-#ifdef CONFIG_SCHED_DEBUG
+#if defined(CONFIG_SCHED_DEBUG) && defined(CONFIG_JUMP_LABEL)
 
 /*
  * To support run-time toggling of sched features, all the translation units
@@ -1689,7 +1689,6 @@ enum {
  */
 extern const_debug unsigned int sysctl_sched_features;
 
-#ifdef CONFIG_JUMP_LABEL
 #define SCHED_FEAT(name, enabled)					\
 static __always_inline bool static_branch_##name(struct static_key *key) \
 {									\
@@ -1702,13 +1701,7 @@ static __always_inline bool static_branch_##name(struct static_key *key) \
 extern struct static_key sched_feat_keys[__SCHED_FEAT_NR];
 #define sched_feat(x) (static_branch_##x(&sched_feat_keys[__SCHED_FEAT_##x]))
 
-#else /* !CONFIG_JUMP_LABEL */
-
-#define sched_feat(x) (sysctl_sched_features & (1UL << __SCHED_FEAT_##x))
-
-#endif /* CONFIG_JUMP_LABEL */
-
-#else /* !SCHED_DEBUG */
+#else /* !(SCHED_DEBUG && CONFIG_JUMP_LABEL) */
 
 /*
  * Each translation unit has its own copy of sysctl_sched_features to allow
@@ -1724,7 +1717,7 @@ static const_debug __maybe_unused unsigned int sysctl_sched_features =
 
 #define sched_feat(x) !!(sysctl_sched_features & (1UL << __SCHED_FEAT_##x))
 
-#endif /* SCHED_DEBUG */
+#endif /* SCHED_DEBUG && CONFIG_JUMP_LABEL */
 
 extern struct static_key_false sched_numa_balancing;
 extern struct static_key_false sched_schedstats;
@@ -3037,6 +3030,28 @@ extern void sched_boost_parse_dt(void);
 extern void clear_ed_task(struct task_struct *p, struct rq *rq);
 extern bool early_detection_notify(struct rq *rq, u64 wallclock);
 
+#ifdef CONFIG_SCHED_SEC_TASK_BOOST
+static int is_low_priority_task(struct task_struct *p);
+
+#define HIGH_PRIO_NICE 0
+#define NORMAL_PRIO_NICE 1
+#define LOW_PRIO_NICE 2
+#define DEFAULT_NICE 120
+
+int is_low_priority_task(struct task_struct  *p)
+{
+	int nice_default = DEFAULT_NICE;
+	int tp = p->prio;
+
+	if (tp < nice_default)
+		return HIGH_PRIO_NICE;
+	else if (tp == nice_default)
+		return NORMAL_PRIO_NICE;
+	else
+		return LOW_PRIO_NICE;
+}
+#endif /* CONFIG_SCHED_SEC_TASK_BOOST */
+
 static inline unsigned int power_cost(int cpu, u64 demand)
 {
 	return cpu_max_possible_capacity(cpu);
@@ -3065,6 +3080,11 @@ static inline enum sched_boost_policy task_boost_policy(struct task_struct *p)
 		if (sched_boost() == CONSERVATIVE_BOOST &&
 			task_util(p) <= sysctl_sched_min_task_util_for_boost)
 			policy = SCHED_BOOST_NONE;
+
+#ifdef CONFIG_SCHED_SEC_TASK_BOOST
+		if (is_low_priority_task(p) == LOW_PRIO_NICE)
+			policy = SCHED_BOOST_NONE;
+#endif
 	}
 
 	return policy;

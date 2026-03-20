@@ -210,7 +210,6 @@ static int kgsl_reclaim_callback(struct notifier_block *nb,
 		}
 	}
 	spin_unlock(&kgsl_driver.proclist_lock);
-
 	if (!process)
 		return NOTIFY_OK;
 
@@ -279,6 +278,7 @@ static int kgsl_reclaim_callback(struct notifier_block *nb,
 
 			ret = reclaim_address_space
 				(memdesc->shmem_filp->f_mapping, data);
+
 
 			memdesc->reclaimed_page_count += memdesc->page_count;
 			atomic_add(memdesc->page_count,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -26,6 +26,9 @@
 #include <linux/soc/qcom/smem_state.h>
 
 #include "peripheral-loader.h"
+#ifdef CONFIG_SENSORS_SSC
+#include <linux/adsp/ssc_ssr_reason.h>
+#endif
 
 #define XO_FREQ			19200000
 #define PROXY_TIMEOUT_MS	10000
@@ -38,13 +41,6 @@
 
 #define desc_to_data(d) container_of(d, struct pil_tz_data, desc)
 #define subsys_to_data(d) container_of(d, struct pil_tz_data, subsys_desc)
-
-struct pil_map_fw_info {
-	void *region;
-	unsigned long attrs;
-	phys_addr_t base_addr;
-	struct device *dev;
-};
 
 /**
  * struct reg_info - regulator info
@@ -606,21 +602,16 @@ static void pil_remove_proxy_vote(struct pil_desc *pil)
 }
 
 static int pil_init_image_trusted(struct pil_desc *pil,
-		const u8 *metadata, size_t size, phys_addr_t mdata_phys,
-		void *region)
+		const u8 *metadata, size_t size)
 {
 	struct pil_tz_data *d = desc_to_data(pil);
 	u32 scm_ret = 0;
 	void *mdata_buf;
+	dma_addr_t mdata_phys;
 	int ret;
+	unsigned long attrs = 0;
+	struct device dev = {0};
 	struct scm_desc desc = {0};
-	struct pil_map_fw_info map_fw_info = {
-		.attrs = pil->attrs,
-		.region = region,
-		.base_addr = mdata_phys,
-		.dev = pil->dev,
-	};
-	void *map_data = pil->map_data ? pil->map_data : &map_fw_info;
 
 	if (d->subsys_desc.no_auth)
 		return 0;
@@ -628,10 +619,15 @@ static int pil_init_image_trusted(struct pil_desc *pil,
 	ret = scm_pas_enable_bw();
 	if (ret)
 		return ret;
+	arch_setup_dma_ops(&dev, 0, 0, NULL, 0);
 
-	mdata_buf = pil->map_fw_mem(mdata_phys, size, map_data);
+	dev.coherent_dma_mask =
+		DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+	attrs |= DMA_ATTR_STRONGLY_ORDERED;
+	mdata_buf = dma_alloc_attrs(&dev, size, &mdata_phys, GFP_KERNEL,
+					attrs);
 	if (!mdata_buf) {
-		dev_err(pil->dev, "Failed to map memory for metadata.\n");
+		pr_err("scm-pas: Allocation for metadata failed.\n");
 		scm_pas_disable_bw();
 		return -ENOMEM;
 	}
@@ -645,7 +641,7 @@ static int pil_init_image_trusted(struct pil_desc *pil,
 			&desc);
 	scm_ret = desc.ret[0];
 
-	pil->unmap_fw_mem(mdata_buf, size, map_data);
+	dma_free_attrs(&dev, size, mdata_buf, mdata_phys, attrs);
 	scm_pas_disable_bw();
 	if (ret)
 		return ret;
@@ -824,6 +820,13 @@ static void log_failure_reason(const struct pil_tz_data *d)
 
 	strlcpy(reason, smem_reason, min(size, (size_t)MAX_SSR_REASON_LEN));
 	pr_err("%s subsystem failure reason: %s.\n", name, reason);
+#ifdef CONFIG_SENSORS_SSC
+	if (!strncmp(name, "adsp", 4)) {
+		ssr_reason_call_back(reason, min(size, (size_t)MAX_SSR_REASON_LEN));
+		if (strstr(reason, "IPLSREVOCER"))
+			subsys_set_fssr(d->subsys, true);
+	}
+#endif
 }
 
 static int subsys_shutdown(const struct subsys_desc *subsys, bool force_stop)

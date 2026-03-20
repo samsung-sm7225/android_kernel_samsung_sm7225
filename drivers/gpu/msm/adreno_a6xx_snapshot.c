@@ -387,6 +387,12 @@ static const unsigned int a6xx_gmu_wrapper_registers[] = {
 	0x1f840, 0x1f840, 0x1f844, 0x1f845, 0x1f887, 0x1f889,
 	/* GMU AO*/
 	0x23b0C, 0x23b0E, 0x23b15, 0x23b15,
+	/* GPU CC */
+	0x24000, 0x24012, 0x24040, 0x24052, 0x24400, 0x24404, 0x24407, 0x2440B,
+	0x24415, 0x2441C, 0x2441E, 0x2442D, 0x2443C, 0x2443D, 0x2443F, 0x24440,
+	0x24442, 0x24449, 0x24458, 0x2445A, 0x24540, 0x2455E, 0x24800, 0x24802,
+	0x24C00, 0x24C02, 0x25400, 0x25402, 0x25800, 0x25802, 0x25C00, 0x25C02,
+	0x26000, 0x26002,
 };
 
 enum a6xx_debugbus_id {
@@ -1696,7 +1702,6 @@ static void _a6xx_do_crashdump(struct kgsl_device *device)
 		/* Wait 1msec to avoid unnecessary looping */
 		usleep_range(100, 1000);
 	}
-
 	kgsl_regread(device, A6XX_CP_CRASH_DUMP_STATUS, &reg);
 
 	if (!ADRENO_FEATURE(ADRENO_DEVICE(device), ADRENO_APRIV))
@@ -1874,11 +1879,12 @@ void a6xx_snapshot(struct adreno_device *adreno_dev,
 		adreno_snapshot_registers(device, snapshot,
 			a6xx_rscc_snapshot_registers,
 			ARRAY_SIZE(a6xx_rscc_snapshot_registers) / 2);
-	} else if (adreno_is_a610(adreno_dev) || adreno_is_a702(adreno_dev)) {
+	}
+
+	if (!gmu_core_isenabled(device))
 		adreno_snapshot_registers(device, snapshot,
 			a6xx_gmu_wrapper_registers,
 			ARRAY_SIZE(a6xx_gmu_wrapper_registers) / 2);
-	}
 
 	sptprac_on = gpudev->sptprac_is_on(adreno_dev);
 
@@ -1956,7 +1962,7 @@ void a6xx_snapshot(struct adreno_device *adreno_dev,
 		kgsl_regread(device, A6XX_RBBM_STATUS3, &val);
 		if (!(val & BIT(24)))
 			memset(a6xx_crashdump_registers.hostptr, 0xaa,
-					a6xx_crashdump_registers.size);
+					a6xx_crashdump_registers.size);		
 	}
 
 	/* Preemption record */
@@ -2245,7 +2251,6 @@ void a6xx_crashdump_init(struct adreno_device *adreno_dev)
 			data_size += REG_PAIR_COUNT(regs->regs, k) *
 				sizeof(unsigned int);
 	}
-
 	/* 16 bytes (2 qwords) for last entry in CD script */
 	script_size += 16;
 	/* Increment data size to store last entry in CD */
@@ -2309,7 +2314,6 @@ void a6xx_crashdump_init(struct adreno_device *adreno_dev)
 	ptr += _a6xx_crashdump_init_ctx_dbgahb(ptr, &offset);
 
 	ptr += _a6xx_crashdump_init_non_ctx_dbgahb(ptr, &offset);
-
 	/* Save CD register end pointer to check CD status completion */
 	a6xx_cd_reg_end = a6xx_crashdump_registers.hostptr + offset;
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -62,7 +62,9 @@ static int ipa_generate_rt_hw_rule(enum ipa_ip_type ip,
 	gen_params.dst_pipe_idx = ipa3_get_ep_mapping(entry->rule.dst);
 	if (gen_params.dst_pipe_idx == -1) {
 		IPAERR_RL("Wrong destination pipe specified in RT rule\n");
+		/***  SSI-25733 : Disable stack trace ****
 		WARN_ON_RATELIMIT_IPA(1);
+		****  SSI-25733 : Disable stack trace ***/
 		return -EPERM;
 	}
 	if (!IPA_CLIENT_IS_CONS(entry->rule.dst)) {
@@ -169,9 +171,6 @@ static int ipa_translate_rt_tbl_to_hw_fmt(enum ipa_ip_type ip,
 			/* only body (no header) */
 			tbl_mem.size = tbl->sz[rlt] -
 				ipahal_get_hw_tbl_hdr_width();
-			/* Add prefetech buf size. */
-			tbl_mem.size +=
-				ipahal_get_hw_prefetch_buf_size();
 			if (ipahal_fltrt_allocate_hw_sys_tbl(&tbl_mem)) {
 				IPAERR_RL("fail to alloc sys tbl of size %d\n",
 					tbl_mem.size);
@@ -1051,7 +1050,9 @@ static int __ipa_create_rt_entry(struct ipa3_rt_entry **entry,
 		id = ipa3_alloc_rule_id(tbl->rule_ids);
 		if (id < 0) {
 			IPAERR_RL("failed to allocate rule id\n");
+			/***  SSI-25733 : Disable stack trace ****
 			WARN_ON_RATELIMIT_IPA(1);
+			****  SSI-25733 : Disable stack trace ***/
 			goto alloc_rule_id_fail;
 		}
 	}
