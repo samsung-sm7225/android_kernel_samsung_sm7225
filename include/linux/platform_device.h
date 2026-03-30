@@ -1,9 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * platform_device.h - generic, centralized driver model
  *
  * Copyright (c) 2001-2003 Patrick Mochel <mochel@osdl.org>
- *
- * This file is released under the GPLv2
  *
  * See Documentation/driver-model/ for more information.
  */
@@ -33,7 +32,7 @@ struct platform_device {
 	 * Driver name to force a match.  Do not set directly, because core
 	 * frees it.  Use driver_set_override() to set or clear it.
 	 */
-	const char *driver_override;
+	char *driver_override;
 
 	/* MFD cell pointer */
 	struct mfd_cell *mfd_cell;

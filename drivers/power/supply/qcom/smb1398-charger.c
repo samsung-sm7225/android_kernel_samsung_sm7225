@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "SMB1398: %s: " fmt, __func__
@@ -233,6 +234,12 @@
 #define DIV2_CP_MASTER			0
 #define DIV2_CP_SLAVE			1
 #define COMBO_PRE_REGULATOR		2
+#define SMB1394_DIV2_CP_PRY		3
+#define SMB1394_DIV2_CP_SECY		4
+#define SMB1398_MAX_IIN			5000
+
+#define IS_SMB1394(role) \
+	(role == SMB1394_DIV2_CP_PRY || role == SMB1394_DIV2_CP_SECY)
 
 enum isns_mode {
 	ISNS_MODE_OFF = 0,
@@ -421,6 +428,9 @@ static int smb1398_set_iin_ma(struct smb1398_chip *chip, int iin_ma)
 {
 	int rc = 0;
 	u8 val;
+
+	if (iin_ma > SMB1398_MAX_IIN)
+		iin_ma = SMB1398_MAX_IIN;
 
 	val = iin_ma / IIN_STEP_MA;
 	rc = smb1398_masked_write(chip, IIN_SS_DAC_TARGET_REG,
@@ -2588,7 +2598,7 @@ static int smb1398_probe(struct platform_device *pdev)
 	chip->disabled = true;
 	platform_set_drvdata(pdev, chip);
 
-	chip->div2_cp_role = (int)of_device_get_match_data(chip->dev);
+	chip->div2_cp_role = (int)(unsigned long)of_device_get_match_data(chip->dev);
 	switch (chip->div2_cp_role) {
 	case DIV2_CP_MASTER:
 		rc = smb1398_div2_cp_master_probe(chip);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/debugfs.h>
 #include <linux/errno.h>
@@ -839,7 +840,68 @@ static ssize_t tzdbgfs_read(struct file *file, char __user *buf,
 		len = count;
 
 	return simple_read_from_buffer(buf, len, offp,
-				tzdbg.stat[(*tz_id)].data, len);
+				tzdbg.stat[tz_id].data, len);
+}
+
+static ssize_t tzdbgfs_read_encrypted(struct file *file, char __user *buf,
+				      size_t count, loff_t *offp)
+{
+	int len = 0, ret = 0;
+	int tz_id = *(int *)(file->private_data);
+	struct tzdbg_stat *stat = &(tzdbg.stat[tz_id]);
+
+	pr_debug("%s: tz_id = %d\n", __func__, tz_id);
+
+	if (tz_id >= TZDBG_STATS_MAX) {
+		pr_err("invalid encrypted log id %d\n", tz_id);
+		return ret;
+	}
+
+	if (!stat->display_len) {
+		if (tz_id == TZDBG_QSEE_LOG)
+			stat->display_len = _disp_encrpted_log_stats(
+						&enc_qseelog_info,
+						tz_id, ENCRYPTED_QSEE_LOG_ID);
+		else
+			stat->display_len = _disp_encrpted_log_stats(
+						&enc_tzlog_info,
+						tz_id, ENCRYPTED_TZ_LOG_ID);
+		stat->display_offset = 0;
+	}
+	len = stat->display_len;
+	if (len > count)
+		len = count;
+
+	*offp = 0;
+	ret = simple_read_from_buffer(buf, len, offp,
+				      tzdbg.stat[tz_id].data +
+					stat->display_offset, count);
+	stat->display_offset += ret;
+	stat->display_len -= ret;
+	pr_debug("ret = %d, offset = %d\n", ret, (int)(*offp));
+	pr_debug("display_len = %d, offset = %d\n",
+		 stat->display_len, stat->display_offset);
+	return ret;
+}
+
+static ssize_t tzdbgfs_read(struct file *file, char __user *buf,
+			    size_t count, loff_t *offp)
+{
+	int tz_id = TZDBG_STATS_MAX;
+
+	if (file->private_data)
+		tz_id = *(int *)(file->private_data);
+	else {
+		pr_err("%s: file data private null unable to proceed\n",
+			__func__);
+		return 0;
+	}
+
+	if (!tzdbg.is_encrypted_log_enabled ||
+	   (tz_id == TZDBG_HYP_GENERAL || tz_id == TZDBG_HYP_LOG))
+		return tzdbgfs_read_unencrypted(file, buf, count, offp);
+	else
+		return tzdbgfs_read_encrypted(file, buf, count, offp);
 }
 
 static const struct file_operations tzdbg_fops = {

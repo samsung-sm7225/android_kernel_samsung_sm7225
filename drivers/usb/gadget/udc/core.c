@@ -515,12 +515,12 @@ EXPORT_SYMBOL_GPL(usb_gadget_wakeup);
 int usb_gsi_ep_op(struct usb_ep *ep,
 		struct usb_gsi_request *req, enum gsi_ep_op op)
 {
-	if (ep->ops->gsi_ep_op)
+	if (ep && ep->ops && ep->ops->gsi_ep_op)
 		return ep->ops->gsi_ep_op(ep, req, op);
 
 	return -EOPNOTSUPP;
 }
-EXPORT_SYMBOL(usb_gsi_ep_op);
+EXPORT_SYMBOL_GPL(usb_gsi_ep_op);
 
 /**
  * usb_gadget_func_wakeup - send a function remote wakeup up notification
@@ -533,15 +533,15 @@ EXPORT_SYMBOL(usb_gsi_ep_op);
 int usb_gadget_func_wakeup(struct usb_gadget *gadget,
 	int interface_id)
 {
-	if (gadget->speed != USB_SPEED_SUPER)
+	if (!gadget || (gadget->speed != USB_SPEED_SUPER))
 		return -EOPNOTSUPP;
 
-	if (!gadget->ops->func_wakeup)
+	if (!gadget->ops || !gadget->ops->func_wakeup)
 		return -EOPNOTSUPP;
 
 	return gadget->ops->func_wakeup(gadget, interface_id);
 }
-EXPORT_SYMBOL(usb_gadget_func_wakeup);
+EXPORT_SYMBOL_GPL(usb_gadget_func_wakeup);
 
 /**
  * usb_gadget_set_selfpowered - sets the device selfpowered feature.
@@ -1044,8 +1044,13 @@ static void usb_gadget_state_work(struct work_struct *work)
 void usb_gadget_set_state(struct usb_gadget *gadget,
 		enum usb_device_state state)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&gadget->state_lock, flags);
 	gadget->state = state;
-	schedule_work(&gadget->work);
+	if (!gadget->teardown)
+		schedule_work(&gadget->work);
+	spin_unlock_irqrestore(&gadget->state_lock, flags);
 }
 EXPORT_SYMBOL_GPL(usb_gadget_set_state);
 
@@ -1210,6 +1215,8 @@ int usb_add_gadget_udc_release(struct device *parent, struct usb_gadget *gadget,
 	int			ret = -ENOMEM;
 
 	dev_set_name(&gadget->dev, "gadget");
+	spin_lock_init(&gadget->state_lock);
+	gadget->teardown = false;
 	INIT_WORK(&gadget->work, usb_gadget_state_work);
 	gadget->dev.parent = parent;
 
@@ -1347,6 +1354,7 @@ static void usb_gadget_remove_driver(struct usb_udc *udc)
 void usb_del_gadget_udc(struct usb_gadget *gadget)
 {
 	struct usb_udc *udc = gadget->udc;
+	unsigned long flags;
 
 	if (!udc)
 		return;
@@ -1365,6 +1373,13 @@ void usb_del_gadget_udc(struct usb_gadget *gadget)
 	mutex_unlock(&udc_lock);
 
 	kobject_uevent(&udc->dev.kobj, KOBJ_REMOVE);
+	/*
+	 * Set the teardown flag before flushing the work to prevent new work
+	 * from being scheduled while we are cleaning up.
+	 */
+	spin_lock_irqsave(&gadget->state_lock, flags);
+	gadget->teardown = true;
+	spin_unlock_irqrestore(&gadget->state_lock, flags);
 	flush_work(&gadget->work);
 	device_unregister(&udc->dev);
 	device_unregister(&gadget->dev);

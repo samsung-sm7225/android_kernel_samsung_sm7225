@@ -888,7 +888,7 @@ static int hci_sock_release(struct socket *sock)
     */
 	return 0;
 }
-/*
+#if 0
 static int hci_sock_blacklist_add(struct hci_dev *hdev, void __user *arg)
 {
 	bdaddr_t bdaddr;
@@ -966,18 +966,20 @@ static int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd,
 
 	return -ENOIOCTLCMD;
 }
-*/
+#endif
+
 static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
 			  unsigned long arg)
 {
-    /*
+#if 0
+{
 	void __user *argp = (void __user *)arg;
 	struct sock *sk = sock->sk;
 	int err;
 
 	BT_DBG("cmd %x arg %lx", cmd, arg);
 
-	// Make sure the cmd is valid before doing anything
+	/* Make sure the cmd is valid before doing anything */
 	switch (cmd) {
 	case HCIGETDEVLIST:
 	case HCIGETDEVINFO:
@@ -1021,13 +1023,13 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
 	if (hci_sock_gen_cookie(sk)) {
 		struct sk_buff *skb;
 
-		// Perform careful checks before setting the HCI_SOCK_TRUSTED
-		// flag. Make sure that not only the current task but also
-		// the socket opener has the required capability, since
-		// privileged programs can be tricked into making ioctl calls
-		// on HCI sockets, and the socket should not be marked as
-		// trusted simply because the ioctl caller is privileged.
-
+		/* Perform careful checks before setting the HCI_SOCK_TRUSTED
+		 * flag. Make sure that not only the current task but also
+		 * the socket opener has the required capability, since
+		 * privileged programs can be tricked into making ioctl calls
+		 * on HCI sockets, and the socket should not be marked as
+		 * trusted simply because the ioctl caller is privileged.
+		 */
 		if (sk_capable(sk, CAP_NET_ADMIN))
 			hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
 
@@ -1095,7 +1097,7 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
 done:
 	release_sock(sk);
 	return err;
-    */
+#endif
 	return 0;
 }
 
@@ -2028,13 +2030,13 @@ done:
 	return err;
 }
 
-/*
+#if 0
 static void hci_sock_destruct(struct sock *sk)
 {
 	skb_queue_purge(&sk->sk_receive_queue);
 	skb_queue_purge(&sk->sk_write_queue);
 }
-*/
+#endif
 
 static const struct proto_ops hci_sock_ops = {
 	.family		= PF_BLUETOOTH,
@@ -2065,7 +2067,7 @@ static struct proto hci_sk_proto = {
 static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
 			   int kern)
 {
-    /*
+#if 0
 	struct sock *sk;
 
 	BT_DBG("sock %p", sock);
@@ -2090,7 +2092,7 @@ static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
 	sk->sk_destruct = hci_sock_destruct;
 
 	bt_sock_link(&hci_sk_list, sk);
-    */
+#endif
 	return 0;
 }
 

@@ -62,11 +62,11 @@
 #include <linux/nsproxy.h>
 #include <linux/poll.h>
 #include <linux/debugfs.h>
-#include <linux/delay.h>
 #include <linux/rbtree.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/mm.h>
 #include <linux/seq_file.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/pid_namespace.h>
 #include <linux/security.h>
@@ -74,6 +74,7 @@
 #include <linux/ratelimit.h>
 
 #include <uapi/linux/android/binder.h>
+#include <uapi/linux/android/binderfs.h>
 #include <uapi/linux/sched/types.h>
 
 #include <asm/cacheflush.h>
@@ -81,10 +82,6 @@
 #include "binder_alloc.h"
 #include "binder_internal.h"
 #include "binder_trace.h"
-
-#ifdef CONFIG_SAMSUNG_FREECESS
-#include <linux/freecess.h>
-#endif
 
 static HLIST_HEAD(binder_deferred_list);
 static DEFINE_MUTEX(binder_deferred_lock);
@@ -191,7 +188,7 @@ enum binder_stat_types {
 };
 
 struct binder_stats {
-	atomic_t br[_IOC_NR(BR_FROZEN_REPLY) + 1];
+	atomic_t br[_IOC_NR(BR_ONEWAY_SPAM_SUSPECT) + 1];
 	atomic_t bc[_IOC_NR(BC_REPLY_SG) + 1];
 	atomic_t obj_created[BINDER_STAT_COUNT];
 	atomic_t obj_deleted[BINDER_STAT_COUNT];
@@ -245,6 +242,7 @@ struct binder_work {
 	enum binder_work_type {
 		BINDER_WORK_TRANSACTION = 1,
 		BINDER_WORK_TRANSACTION_COMPLETE,
+		BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT,
 		BINDER_WORK_RETURN_ERROR,
 		BINDER_WORK_NODE,
 		BINDER_WORK_DEAD_BINDER,
@@ -477,10 +475,13 @@ struct binder_priority {
  * @is_dead:              process is dead and awaiting free
  *                        when outstanding transactions are cleaned up
  *                        (protected by @inner_lock)
+ * @is_frozen:            process is frozen and unable to service
+ *                        binder transactions
+ *                        (protected by @inner_lock)
  * @sync_recv:            process received sync transactions since last frozen
+ *                        (protected by @inner_lock)
  *                        bit 0: received sync transaction after being frozen
  *                        bit 1: new pending sync transaction during freezing
- *                        (protected by @inner_lock)
  * @async_recv:           process received async transactions since last frozen
  *                        (protected by @inner_lock)
  * @freeze_wait:          waitqueue of processes waiting for all outstanding
@@ -512,6 +513,8 @@ struct binder_priority {
  * @outer_lock:           no nesting under innor or node lock
  *                        Lock order: 1) outer, 2) node, 3) inner
  * @binderfs_entry:       process-specific binderfs log file
+ * @oneway_spam_detection_enabled: process enabled oneway spam detection
+ *                        or not
  *
  * Bookkeeping structure for binder processes
  */
@@ -550,6 +553,7 @@ struct binder_proc {
 	spinlock_t inner_lock;
 	spinlock_t outer_lock;
 	struct dentry *binderfs_entry;
+	bool oneway_spam_detection_enabled;
 };
 
 enum {
@@ -1438,17 +1442,8 @@ static int binder_inc_node_nilocked(struct binder_node *node, int strong,
 	} else {
 		if (!internal)
 			node->local_weak_refs++;
-		if (!node->has_weak_ref && list_empty(&node->work.entry)) {
-			if (target_list == NULL) {
-				pr_err("invalid inc weak node for %d\n",
-					node->debug_id);
-				return -EINVAL;
-			}
-			/*
-			 * See comment above
-			 */
+		if (!node->has_weak_ref && target_list && list_empty(&node->work.entry))
 			binder_enqueue_work_ilocked(&node->work, target_list);
-		}
 	}
 	return 0;
 }
@@ -2883,8 +2878,9 @@ static int binder_fixup_parent(struct binder_transaction *t,
  * If the @thread parameter is not NULL, the transaction is always queued
  * to the waitlist of that specific thread.
  *
- * Return:	true if the transactions was successfully queued
- *		false if the target process or thread is dead
+ * Return:	0 if the transaction was successfully queued
+ *		BR_DEAD_REPLY if the target process or thread is dead
+ *		BR_FROZEN_REPLY if the target process or thread is frozen
  */
 static int binder_proc_transaction(struct binder_transaction *t,
 				    struct binder_proc *proc,
@@ -2910,12 +2906,12 @@ static int binder_proc_transaction(struct binder_transaction *t,
 	}
 
 	binder_inner_proc_lock(proc);
-
 	if (proc->is_frozen) {
 		proc->sync_recv |= !oneway;
 		proc->async_recv |= oneway;
 	}
-	if ((proc->is_frozen && !oneway) || proc->is_dead || 
+
+	if ((proc->is_frozen && !oneway) || proc->is_dead ||
 			(thread && thread->is_dead)) {
 		binder_inner_proc_unlock(proc);
 		binder_node_unlock(node);
@@ -2987,76 +2983,6 @@ static struct binder_node *binder_get_node_refs_for_txn(
 	return target_node;
 }
 
-#ifdef CONFIG_SAMSUNG_FREECESS
-// 1) Skip first 8(P)/12(Q) bytes (useless data)
-// 2) Make sure that the invalid address issue is not occuring (j=9, j+=2)
-// 3) Java layer uses 2 bytes char. And only the first byte has the data. (p+=2)
-// 4) Parcel::writeInterfaceToken() in frameworks/native/libs/binder/Parcel.cpp
-static void freecess_async_binder_report(struct binder_proc *proc,
-						struct binder_proc *target_proc,
-						struct binder_transaction_data *tr,
-						struct binder_transaction *t)
-{
-	char buf_user[INTERFACETOKEN_BUFF_SIZE] = {0};
-	char buf[INTERFACETOKEN_BUFF_SIZE] = {0};
-	char *p = NULL;
-	int i = 0;
-	int j = 0;
-	int skip_bytes = 8;
-
-	if (!proc || !target_proc || !tr || !t)
-		return;
-
-	// for android P/Q/R verson, skip 8/12/16 bytes;
-	if (freecess_fw_version == 0)
-		skip_bytes = 8;
-	else if (freecess_fw_version == 1)
-		skip_bytes = 12;
-	else if (freecess_fw_version == 2)
-		skip_bytes = 16;
-
-	if ((tr->flags & TF_ONE_WAY) && target_proc
-		&& target_proc->tsk && target_proc->tsk->cred
-		&& (target_proc->tsk->cred->euid.val > 10000)
-		&& (proc->pid != target_proc->pid)) {
-		if (thread_group_is_frozen(target_proc->tsk)) {
-			if (t->buffer->data_size > skip_bytes) {
-				if (0 == copy_from_user(buf_user, (const void __user *)(uintptr_t)tr->data.ptr.buffer,
-					min_t(binder_size_t, tr->data_size, INTERFACETOKEN_BUFF_SIZE - 2))) {
-					p = &buf_user[skip_bytes];
-					i = 0;
-					j = skip_bytes + 1;
-					while (i < INTERFACETOKEN_BUFF_SIZE && j < t->buffer->data_size && *p != '\0') {
-						buf[i++] = *p;
-						j += 2;
-						p += 2;
-					}
-					if (i == INTERFACETOKEN_BUFF_SIZE) buf[i-1] = '\0';
-				}
-				binder_report(target_proc->tsk, tr->code, buf, tr->flags & TF_ONE_WAY);
-			}
-		}
-	}
-}
-
-static void freecess_sync_binder_report(struct binder_proc *proc,
-						struct binder_proc *target_proc,
-						struct binder_transaction_data *tr)
-{
-	if (!proc || !target_proc || !tr)
-		return;
-
-	if ((!(tr->flags & TF_ONE_WAY)) && target_proc
-		&& target_proc->tsk && target_proc->tsk->cred
-		&& (target_proc->tsk->cred->euid.val > 10000)
-		&& (proc->pid != target_proc->pid) 
-		&& thread_group_is_frozen(target_proc->tsk)) {
-		//if sync binder, we don't need detecting info, so set code and interfacename as default value.
-		binder_report(target_proc->tsk, 0, "sync_binder", tr->flags & TF_ONE_WAY);
-	}
-}
-#endif
-
 static void binder_transaction(struct binder_proc *proc,
 			       struct binder_thread *thread,
 			       struct binder_transaction_data *tr, int reply,
@@ -3093,7 +3019,7 @@ static void binder_transaction(struct binder_proc *proc,
 	e->target_handle = tr->target.handle;
 	e->data_size = tr->data_size;
 	e->offsets_size = tr->offsets_size;
-	e->context_name = proc->context->name;
+	strscpy(e->context_name, proc->context->name, BINDERFS_MAX_NAME);
 
 	if (reply) {
 		binder_inner_proc_lock(proc);
@@ -3200,11 +3126,6 @@ static void binder_transaction(struct binder_proc *proc,
 			goto err_dead_binder;
 		}
 		e->to_node = target_node->debug_id;
-
-#ifdef CONFIG_SAMSUNG_FREECESS
-		freecess_sync_binder_report(proc, target_proc, tr);
-#endif
-
 		if (security_binder_transaction(proc->cred,
 						target_proc->cred) < 0) {
 			return_error = BR_FAILED_REPLY;
@@ -3338,26 +3259,9 @@ static void binder_transaction(struct binder_proc *proc,
 	if (target_node && target_node->txn_security_ctx) {
 		u32 secid;
 		size_t added_size;
-		int retries = 0;
-		int max_retries = 100;
 
 		security_cred_getsecid(proc->cred, &secid);
-retry_lowmem:
 		ret = security_secid_to_secctx(secid, &secctx, &secctx_sz);
-		if (ret == -ENOMEM && retries++ < max_retries) {
-			/*
-			 * security_secid_to_secctx() can fail
-			 * because of a GFP_ATOMIC allocation in
-			 * which case -ENOMEM is returned. This needs
-			 * to be retried, but there is currently no
-			 * way to tell userspace to retry so we do
-			 * it here. Sleep briefly to allow the low
-			 * memory condition to resolve.
-			 */
-			udelay(100);
-			goto retry_lowmem;
-		}
-
 		if (ret) {
 			return_error = BR_FAILED_REPLY;
 			return_error_param = ret;
@@ -3407,6 +3311,7 @@ retry_lowmem:
 	t->buffer->debug_id = t->debug_id;
 	t->buffer->transaction = t;
 	t->buffer->target_node = target_node;
+	t->buffer->clear_on_free = !!(t->flags & TF_CLEAR_BUF);
 	trace_binder_transaction_alloc_buf(t->buffer);
 
 	if (binder_alloc_copy_user_to_buffer(
@@ -3453,11 +3358,6 @@ retry_lowmem:
 		return_error_line = __LINE__;
 		goto err_bad_offset;
 	}
-
-#ifdef CONFIG_SAMSUNG_FREECESS
-	freecess_async_binder_report(proc, target_proc, tr, t); 
-#endif
-
 	off_start_offset = ALIGN(tr->data_size, sizeof(void *));
 	buffer_offset = off_start_offset;
 	off_end_offset = off_start_offset + tr->offsets_size;
@@ -3651,7 +3551,10 @@ retry_lowmem:
 			goto err_bad_object_type;
 		}
 	}
-	tcomplete->type = BINDER_WORK_TRANSACTION_COMPLETE;
+	if (t->buffer->oneway_spam_suspect)
+		tcomplete->type = BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT;
+	else
+		tcomplete->type = BINDER_WORK_TRANSACTION_COMPLETE;
 	t->work.type = BINDER_WORK_TRANSACTION;
 
 	if (reply) {
@@ -3686,8 +3589,8 @@ retry_lowmem:
 		t->from_parent = thread->transaction_stack;
 		thread->transaction_stack = t;
 		binder_inner_proc_unlock(proc);
-		return_error =
-			binder_proc_transaction(t, target_proc, target_thread);
+		return_error = binder_proc_transaction(t,
+				target_proc, target_thread);
 		if (return_error) {
 			binder_inner_proc_lock(proc);
 			binder_pop_transaction_ilocked(thread, t);
@@ -4321,7 +4224,7 @@ static int binder_wait_for_work(struct binder_thread *thread,
 		binder_inner_proc_lock(proc);
 		list_del_init(&thread->waiting_thread_node);
 		if (signal_pending(current)) {
-			ret = -EINTR;
+			ret = -ERESTARTSYS;
 			break;
 		}
 	}
@@ -4435,9 +4338,14 @@ retry:
 
 			binder_stat_br(proc, thread, cmd);
 		} break;
-		case BINDER_WORK_TRANSACTION_COMPLETE: {
+		case BINDER_WORK_TRANSACTION_COMPLETE:
+		case BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT: {
+			if (proc->oneway_spam_detection_enabled &&
+				   w->type == BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT)
+				cmd = BR_ONEWAY_SPAM_SUSPECT;
+			else
+				cmd = BR_TRANSACTION_COMPLETE;
 			binder_inner_proc_unlock(proc);
-			cmd = BR_TRANSACTION_COMPLETE;
 			kfree(w);
 			binder_stats_deleted(BINDER_STAT_TRANSACTION_COMPLETE);
 			if (put_user(cmd, (uint32_t __user *)ptr))
@@ -5141,8 +5049,10 @@ static bool binder_txns_pending_ilocked(struct binder_proc *proc)
 {
 	struct rb_node *n;
 	struct binder_thread *thread;
+
 	if (proc->outstanding_txns > 0)
 		return true;
+
 	for (n = rb_first(&proc->threads); n; n = rb_next(n)) {
 		thread = rb_entry(n, struct binder_thread, rb_node);
 		if (thread->transaction_stack)
@@ -5150,6 +5060,7 @@ static bool binder_txns_pending_ilocked(struct binder_proc *proc)
 	}
 	return false;
 }
+
 static int binder_ioctl_freeze(struct binder_freeze_info *info,
 			       struct binder_proc *target_proc)
 {
@@ -5181,7 +5092,7 @@ static int binder_ioctl_freeze(struct binder_freeze_info *info,
 			(!target_proc->outstanding_txns),
 			msecs_to_jiffies(info->timeout_ms));
 
-    /* Check pending transactions that wait for reply */
+	/* Check pending transactions that wait for reply */
 	if (ret >= 0) {
 		binder_inner_proc_lock(target_proc);
 		if (binder_txns_pending_ilocked(target_proc))
@@ -5198,7 +5109,8 @@ static int binder_ioctl_freeze(struct binder_freeze_info *info,
 	return ret;
 }
 
-static int binder_ioctl_get_freezer_info(struct binder_frozen_status_info *info)
+static int binder_ioctl_get_freezer_info(
+				struct binder_frozen_status_info *info)
 {
 	struct binder_proc *target_proc;
 	bool found = false;
@@ -5208,7 +5120,7 @@ static int binder_ioctl_get_freezer_info(struct binder_frozen_status_info *info)
 	info->async_recv = 0;
 
 	mutex_lock(&binder_procs_lock);
-	hlist_for_each_entry (target_proc, &binder_procs, proc_node) {
+	hlist_for_each_entry(target_proc, &binder_procs, proc_node) {
 		if (target_proc->pid == info->pid) {
 			found = true;
 			binder_inner_proc_lock(target_proc);
@@ -5226,6 +5138,7 @@ static int binder_ioctl_get_freezer_info(struct binder_frozen_status_info *info)
 
 	return 0;
 }
+
 static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret;
@@ -5344,8 +5257,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	}
-    // ++ Google Freezer
-    case BINDER_FREEZE: {
+	case BINDER_FREEZE: {
 		struct binder_freeze_info info;
 		struct binder_proc **target_procs = NULL, *target_proc;
 		int target_procs_count = 0, i = 0;
@@ -5407,17 +5319,32 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 	case BINDER_GET_FROZEN_INFO: {
 		struct binder_frozen_status_info info;
+
 		if (copy_from_user(&info, ubuf, sizeof(info))) {
 			ret = -EFAULT;
 			goto err;
 		}
+
 		ret = binder_ioctl_get_freezer_info(&info);
 		if (ret < 0)
 			goto err;
+
 		if (copy_to_user(ubuf, &info, sizeof(info))) {
 			ret = -EFAULT;
 			goto err;
 		}
+		break;
+	}
+	case BINDER_ENABLE_ONEWAY_SPAM_DETECTION: {
+		uint32_t enable;
+
+		if (copy_from_user(&enable, ubuf, sizeof(enable))) {
+			ret = -EINVAL;
+			goto err;
+		}
+		binder_inner_proc_lock(proc);
+		proc->oneway_spam_detection_enabled = (bool)enable;
+		binder_inner_proc_unlock(proc);
 		break;
 	}
 	default:
@@ -5429,7 +5356,7 @@ err:
 	if (thread)
 		thread->looper_need_return = false;
 	wait_event_interruptible(binder_user_error_wait, binder_stop_on_user_error < 2);
-	if (ret && ret != -EINTR)
+	if (ret && ret != -ERESTARTSYS)
 		pr_info("%d:%d ioctl %x %lx returned %d\n", proc->pid, current->pid, cmd, arg, ret);
 err_unlocked:
 	trace_binder_ioctl_done(ret);
@@ -6251,6 +6178,7 @@ static const char * const binder_return_strings[] = {
 	"BR_CLEAR_DEATH_NOTIFICATION_DONE",
 	"BR_FAILED_REPLY",
 	"BR_FROZEN_REPLY",
+	"BR_ONEWAY_SPAM_SUSPECT",
 };
 
 static const char * const binder_command_strings[] = {
@@ -6528,7 +6456,7 @@ const struct file_operations binder_fops = {
 	.owner = THIS_MODULE,
 	.poll = binder_poll,
 	.unlocked_ioctl = binder_ioctl,
-	.compat_ioctl = binder_ioctl,
+	.compat_ioctl = compat_ptr_ioctl,
 	.mmap = binder_mmap,
 	.open = binder_open,
 	.flush = binder_flush,

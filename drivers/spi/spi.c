@@ -1865,6 +1865,16 @@ static acpi_status acpi_register_spi_device(struct spi_controller *ctlr,
 	acpi_set_modalias(adev, acpi_device_hid(adev), spi->modalias,
 			  sizeof(spi->modalias));
 
+	/*
+	 * This gets re-tried in spi_probe() for -EPROBE_DEFER handling in case
+	 * the GPIO controller does not have a driver yet. This needs to be done
+	 * here too, because this call sets the GPIO direction and/or bias.
+	 * Setting these needs to be done even if there is no driver, in which
+	 * case spi_probe() will never get called.
+	 */
+	if (spi->irq < 0)
+		spi->irq = acpi_dev_gpio_irq_get(adev, 0);
+
 	acpi_device_set_enumerated(adev);
 
 	adev->power.flags.ignore_parent = true;
@@ -2108,7 +2118,6 @@ struct spi_controller *__devm_spi_alloc_controller(struct device *dev,
 
 	ctlr = __spi_alloc_controller(dev, size, slave);
 	if (ctlr) {
-		ctlr->devm_allocated = true;
 		*ptr = ctlr;
 		devres_add(dev, ptr);
 	} else {
@@ -2369,6 +2378,11 @@ int devm_spi_register_controller(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(devm_spi_register_controller);
 
+static int devm_spi_match_controller(struct device *dev, void *res, void *ctlr)
+{
+	return *(struct spi_controller **)res == ctlr;
+}
+
 static int __unregister(struct device *dev, void *null)
 {
 	spi_unregister_device(to_spi_device(dev));
@@ -2415,7 +2429,8 @@ void spi_unregister_controller(struct spi_controller *ctlr)
 	/* Release the last reference on the controller if its driver
 	 * has not yet been converted to devm_spi_alloc_master/slave().
 	 */
-	if (!ctlr->devm_allocated)
+	if (!devres_find(ctlr->dev.parent, devm_spi_release_controller,
+			 devm_spi_match_controller, ctlr))
 		put_device(&ctlr->dev);
 
 	/* free bus id */

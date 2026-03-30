@@ -751,7 +751,7 @@ USER(\label, ic	ivau, \tmp2)			// invalidate I line PoU
 	.previous
 .Lyield_out_\@ :
 	.endm
-	
+
 	.macro __mitigate_spectre_bhb_loop      tmp
 #ifdef CONFIG_MITIGATE_SPECTRE_BRANCH_HISTORY
 alternative_cb  spectre_bhb_patch_loop_iter

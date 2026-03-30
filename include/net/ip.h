@@ -34,7 +34,9 @@
 #include <net/flow.h>
 #include <net/flow_dissector.h>
 #include <net/netns/hash.h>
+#ifndef __GENKSYMS__
 #include <net/lwtunnel.h>
+#endif
 
 #define IPV4_MAX_PMTU		65535U		/* RFC 2675, Section 5.1 */
 #define IPV4_MIN_MTU		68			/* RFC 791 */
@@ -435,8 +437,9 @@ static inline unsigned int ip_skb_dst_mtu(struct sock *sk,
 	return mtu - lwtunnel_headroom(skb_dst(skb)->lwtstate, mtu);
 }
 
-int ip_metrics_convert(struct net *net, struct nlattr *fc_mx, int fc_mx_len,
-		       u32 *metrics);
+struct dst_metrics *ip_fib_metrics_init(struct net *net, struct nlattr *fc_mx,
+					int fc_mx_len,
+					struct netlink_ext_ack *extack);
 
 u32 ip_idents_reserve(u32 hash, int segs);
 void __ip_select_ident(struct net *net, struct iphdr *iph, int segs);

@@ -14,9 +14,6 @@
 #include <trace/events/dfc.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
-#include <linux/alarmtimer.h>
-#include <linux/netlog.h>
-#include <linux/rtc.h>
 
 #define NLMSG_FLOW_ACTIVATE 1
 #define NLMSG_FLOW_DEACTIVATE 2
@@ -196,8 +193,6 @@ static void qmi_rmnet_update_flow_map(struct rmnet_flow_map *itm,
 int qmi_rmnet_flow_control(struct net_device *dev, u32 mq_idx, int enable)
 {
 	struct netdev_queue *q;
-	struct timespec ts;
-	struct rtc_time tm;
 
 	if (unlikely(mq_idx >= dev->num_tx_queues))
 		return 0;
@@ -205,13 +200,6 @@ int qmi_rmnet_flow_control(struct net_device *dev, u32 mq_idx, int enable)
 	q = netdev_get_tx_queue(dev, mq_idx);
 	if (unlikely(!q))
 		return 0;
-
-	getnstimeofday(&ts);
-	rtc_time_to_tm(ts.tv_sec, &tm);
-	net_log("%d-%02d-%02d %02d:%02d:%02d.%06lu, %s[%d] %s_queue\n",
-				tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-				tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec/1000,
-				dev->name, mq_idx, enable ? "wake" : "stop");
 
 	if (enable)
 		netif_tx_wake_queue(q);
@@ -406,12 +394,16 @@ static void __qmi_rmnet_update_mq(struct net_device *dev,
 				bearer->mq_idx = itm->mq_idx;
 		}
 
-		qmi_rmnet_flow_control(dev, itm->mq_idx,
-				       bearer->grant_size > 0 ? 1 : 0);
+		/* Always enable flow for the newly associated bearer */
+		if (!bearer->grant_size) {
+			bearer->grant_size = DEFAULT_GRANT;
+			bearer->grant_thresh =
+				qmi_rmnet_grant_per(DEFAULT_GRANT);
+		}
+		qmi_rmnet_flow_control(dev, itm->mq_idx, 1);
 
 		if (dfc_mode == DFC_MODE_SA)
-			qmi_rmnet_flow_control(dev, bearer->ack_mq_idx,
-					bearer->grant_size > 0 ? 1 : 0);
+			qmi_rmnet_flow_control(dev, bearer->ack_mq_idx, 1);
 	}
 }
 
@@ -461,10 +453,6 @@ static int qmi_rmnet_add_flow(struct net_device *dev, struct tcmsg *tcm,
 	new_map.mq_idx = tcm->tcm_handle;
 	trace_dfc_flow_info(dev->name, new_map.bearer_id, new_map.flow_id,
 			    new_map.ip_type, new_map.mq_idx, 1);
-	net_log("add flow: %s m=%d b=%d f=%d ip=%d q=%d\n",
-			dev->name, qos_info->mux_id, new_map.bearer_id,
-			new_map.flow_id,
-			new_map.ip_type, new_map.mq_idx);
 again:
 	spin_lock_bh(&qos_info->qos_lock);
 
@@ -545,10 +533,7 @@ qmi_rmnet_del_flow(struct net_device *dev, struct tcmsg *tcm,
 		trace_dfc_flow_info(dev->name, new_map.bearer_id,
 				    new_map.flow_id, new_map.ip_type,
 				    itm->mq_idx, 0);
-		net_log("delete flow: %s m=%d b=%d f=%d ip=%d q=%d\n",
-			dev->name, qos_info->mux_id, new_map.bearer_id,
-			new_map.flow_id,
-			new_map.ip_type, itm->mq_idx);
+
 		__qmi_rmnet_bearer_put(dev, qos_info, itm->bearer, true);
 
 		/* Remove from flow map */
@@ -556,11 +541,8 @@ qmi_rmnet_del_flow(struct net_device *dev, struct tcmsg *tcm,
 		kfree(itm);
 	}
 
-	if (list_empty(&qos_info->flow_head)) {
+	if (list_empty(&qos_info->flow_head))
 		netif_tx_wake_all_queues(dev);
-		net_log("no action: %s m=%d b=%u gr=%u f=%u q=%d en",
-			dev->name, qos_info->mux_id, 0xff, DEFAULT_GRANT, 0, 0);
-	}
 
 	spin_unlock_bh(&qos_info->qos_lock);
 
@@ -1071,7 +1053,6 @@ static LIST_HEAD(ps_list);
 
 struct rmnet_powersave_work {
 	struct delayed_work work;
-	struct alarm atimer;
 	void *port;
 	u64 old_rx_pkts;
 	u64 old_tx_pkts;
@@ -1156,16 +1137,6 @@ static void qmi_rmnet_work_restart(void *port)
 	rcu_read_unlock();
 }
 
-static enum alarmtimer_restart qmi_rmnet_work_alarm(struct alarm *atimer,
-						    ktime_t now)
-{
-	struct rmnet_powersave_work *real_work;
-
-	real_work = container_of(atimer, struct rmnet_powersave_work, atimer);
-	qmi_rmnet_work_restart(real_work->port);
-	return ALARMTIMER_NORESTART;
-}
-
 static void qmi_rmnet_check_stats(struct work_struct *work)
 {
 	struct rmnet_powersave_work *real_work;
@@ -1173,7 +1144,6 @@ static void qmi_rmnet_check_stats(struct work_struct *work)
 	u64 rxd, txd;
 	u64 rx, tx;
 	bool dl_msg_active;
-	bool use_alarm_timer = true;
 
 	real_work = container_of(to_delayed_work(work),
 				 struct rmnet_powersave_work, work);
@@ -1184,6 +1154,15 @@ static void qmi_rmnet_check_stats(struct work_struct *work)
 	qmi = (struct qmi_info *)rmnet_get_qmi_pt(real_work->port);
 	if (unlikely(!qmi))
 		return;
+
+	rmnet_get_packets(real_work->port, &rx, &tx);
+	rxd = rx - real_work->old_rx_pkts;
+	txd = tx - real_work->old_tx_pkts;
+	real_work->old_rx_pkts = rx;
+	real_work->old_tx_pkts = tx;
+
+	dl_msg_active = qmi->dl_msg_active;
+	qmi->dl_msg_active = false;
 
 	if (qmi->ps_enabled) {
 
@@ -1219,10 +1198,8 @@ static void qmi_rmnet_check_stats(struct work_struct *work)
 		 * (likely in RLF), no need to enter powersave
 		 */
 		if (!dl_msg_active &&
-		    !rmnet_all_flows_enabled(real_work->port)) {
-			use_alarm_timer = false;
+		    !rmnet_all_flows_enabled(real_work->port))
 			goto end;
-		}
 
 		/* Deregister to suppress QMI DFC and DL marker */
 		if (qmi_rmnet_set_powersave_mode(real_work->port, 1) < 0)
@@ -1246,14 +1223,9 @@ static void qmi_rmnet_check_stats(struct work_struct *work)
 	}
 end:
 	rcu_read_lock();
-	if (!rmnet_work_quit) {
-		if (use_alarm_timer)
-			alarm_start_relative(&real_work->atimer,
-					     PS_INTERVAL_KT);
-		else
-			queue_delayed_work(rmnet_ps_wq, &real_work->work,
-					   PS_INTERVAL);
-	}
+	if (!rmnet_work_quit)
+		queue_delayed_work(rmnet_ps_wq, &real_work->work,
+				   PS_INTERVAL);
 	rcu_read_unlock();
 }
 
@@ -1288,8 +1260,7 @@ void qmi_rmnet_work_init(void *port)
 		rmnet_ps_wq = NULL;
 		return;
 	}
-	INIT_DEFERRABLE_WORK(&rmnet_work->work, qmi_rmnet_check_stats);
-	alarm_init(&rmnet_work->atimer, ALARM_BOOTTIME, qmi_rmnet_work_alarm);
+	INIT_DELAYED_WORK(&rmnet_work->work, qmi_rmnet_check_stats);
 	rmnet_work->port = port;
 	rmnet_get_packets(rmnet_work->port, &rmnet_work->old_rx_pkts,
 			  &rmnet_work->old_tx_pkts);
@@ -1323,7 +1294,6 @@ void qmi_rmnet_work_exit(void *port)
 	synchronize_rcu();
 
 	rmnet_work_inited = false;
-	alarm_cancel(&rmnet_work->atimer);
 	cancel_delayed_work_sync(&rmnet_work->work);
 	destroy_workqueue(rmnet_ps_wq);
 	qmi_rmnet_work_set_active(port, 0);

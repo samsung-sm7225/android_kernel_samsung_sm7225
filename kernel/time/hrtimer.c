@@ -1913,9 +1913,6 @@ int hrtimers_prepare_cpu(unsigned int cpu)
 	cpu_base->expires_next = KTIME_MAX;
 	cpu_base->softirq_expires_next = KTIME_MAX;
 	cpu_base->online = 1;
-
-	restore_pcpu_tick(cpu);
-
 	return 0;
 }
 
@@ -2084,6 +2081,7 @@ schedule_hrtimeout_range_clock(ktime_t *expires, u64 delta,
 
 	return !t.task ? 0 : -EINTR;
 }
+EXPORT_SYMBOL_GPL(schedule_hrtimeout_range_clock);
 
 /**
  * schedule_hrtimeout_range - sleep until timeout

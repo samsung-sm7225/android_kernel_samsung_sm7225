@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -3850,6 +3851,11 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 		mutex_lock(&driver->diagchar_mutex);
 		driver->data_ready[index] ^= EVENT_MASKS_TYPE;
 		atomic_dec(&driver->data_ready_notif[index]);
+
+		DIAG_LOG(DIAG_DEBUG_MASKS,
+		"diag: %s: event masks update complete for client pid: %d\n",
+		__func__, current->tgid);
+
 		goto exit;
 	}
 

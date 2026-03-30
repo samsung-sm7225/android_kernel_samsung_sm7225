@@ -290,7 +290,6 @@ EXPORT_SYMBOL(drm_connector_init);
 
 /**
  * drm_connector_attach_edid_property - attach edid property.
- * @dev: DRM device
  * @connector: the connector
  *
  * Some connector types like DRM_MODE_CONNECTOR_VIRTUAL do not get a
@@ -683,7 +682,7 @@ void drm_connector_list_iter_end(struct drm_connector_list_iter *iter)
 		__drm_connector_put_safe(iter->conn);
 		spin_unlock_irqrestore(&config->connector_list_lock, flags);
 	}
-	lock_release(&connector_list_iter_dep_map, 0, _RET_IP_);
+	lock_release(&connector_list_iter_dep_map, _RET_IP_);
 }
 EXPORT_SYMBOL(drm_connector_list_iter_end);
 

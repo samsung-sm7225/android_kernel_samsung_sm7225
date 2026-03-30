@@ -201,7 +201,6 @@ void panic(const char *fmt, ...)
 	int old_cpu, this_cpu;
 	bool _crash_kexec_post_notifiers = crash_kexec_post_notifiers;
 
-	sec_debug_store_extc_idx(false);
 	if (panic_on_warn) {
 		/*
 		 * This thread may hit another WARN() in the panic path.

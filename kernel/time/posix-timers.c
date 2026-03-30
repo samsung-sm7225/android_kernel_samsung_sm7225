@@ -161,6 +161,7 @@ static int posix_timer_add(struct k_itimer *timer)
 	struct signal_struct *sig = current->signal;
 	struct hlist_head *head;
 	unsigned int cnt, id;
+	int ret = -ENOENT;
 
 	/*
 	 * FIXME: Replace this by a per signal struct xarray once there is
@@ -180,9 +181,9 @@ static int posix_timer_add(struct k_itimer *timer)
 			return id;
 		}
 		spin_unlock(&hash_lock);
-	}
-	/* POSIX return code when no timer ID could be allocated */
-	return -EAGAIN;
+		cond_resched();
+	} while (ret == -ENOENT);
+	return ret;
 }
 
 static inline void unlock_timer(struct k_itimer *timr, unsigned long flags)

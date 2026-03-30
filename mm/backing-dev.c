@@ -947,6 +947,8 @@ struct backing_dev_info *bdi_alloc_node(gfp_t gfp_mask, int node_id)
 		kfree(bdi);
 		return NULL;
 	}
+	bdi->ra_pages = VM_READAHEAD_PAGES;
+	bdi->io_pages = VM_READAHEAD_PAGES;
 	return bdi;
 }
 EXPORT_SYMBOL(bdi_alloc_node);
@@ -1092,7 +1094,7 @@ const char *bdi_dev_name(struct backing_dev_info *bdi)
 {
 	if (!bdi || !bdi->dev)
 		return bdi_unknown_name;
-	return bdi->dev_name;
+	return dev_name(bdi->dev);
 }
 EXPORT_SYMBOL_GPL(bdi_dev_name);
 

@@ -421,8 +421,6 @@ struct snd_pcm_runtime {
 	wait_queue_head_t sleep;	/* poll sleep */
 	wait_queue_head_t tsleep;	/* transfer sleep */
 	struct fasync_struct *fasync;
-	struct mutex buffer_mutex;	/* protect for buffer changes */
-	atomic_t buffer_accessing;	/* >0: in r/w operation, <0: blocked */
 
 	/* -- private section -- */
 	void *private_data;
@@ -451,6 +449,10 @@ struct snd_pcm_runtime {
 #if IS_ENABLED(CONFIG_SND_PCM_OSS)
 	/* -- OSS things -- */
 	struct snd_pcm_oss_runtime oss;
+#endif
+#ifndef __GENKSYMS__
+	struct mutex buffer_mutex;	/* protect for buffer changes */
+	atomic_t buffer_accessing;	/* >0: in r/w operation, <0: blocked */
 #endif
 };
 
@@ -1364,6 +1366,8 @@ int snd_pcm_lib_mmap_iomem(struct snd_pcm_substream *substream, struct vm_area_s
 #define SNDRV_PCM_INFO_MMAP_IOMEM	0
 #define snd_pcm_lib_mmap_iomem	NULL
 #endif
+
+void snd_pcm_runtime_buffer_set_silence(struct snd_pcm_runtime *runtime);
 
 /**
  * snd_pcm_limit_isa_dma_size - Get the max size fitting with ISA DMA transfer

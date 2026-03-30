@@ -800,6 +800,7 @@ retry:
 			} else
 				goto retry;
 		} else {
+			/* skb sent - drop the extra reference and continue */
 			consume_skb(skb);
 			failed = 0;
 		}

@@ -11,6 +11,13 @@ config DCACHE_WORD_ACCESS
 config INTERRUPTIBLE_SYNC
         bool "Support interruptible sync for Samsung Mobile Device"
 
+config VALIDATE_FS_PARSER
+	bool "Validate filesystem parameter description"
+	default y
+	help
+	  Enable this to perform validation of the parameter description for a
+	  filesystem when it is registered.
+
 if BLOCK
 
 config FS_IOMAP
@@ -137,10 +144,11 @@ endmenu
 endif # BLOCK
 
 if BLOCK
-menu "DOS/FAT/NT Filesystems"
+menu "DOS/FAT/EXFAT/NT Filesystems"
 
 source "fs/fat/Kconfig"
 source "fs/sdfat/Kconfig"
+source "fs/exfat/Kconfig"
 source "fs/ntfs/Kconfig"
 
 endmenu
@@ -226,7 +234,7 @@ endmenu
 menuconfig MISC_FILESYSTEMS
 	bool "Miscellaneous filesystems"
 	default y
-	---help---
+	help
 	  Say Y here to get to see options for various miscellaneous
 	  filesystems, such as filesystems that came from other
 	  operating systems.
@@ -264,6 +272,7 @@ source "fs/pstore/Kconfig"
 source "fs/sysv/Kconfig"
 source "fs/ufs/Kconfig"
 source "fs/exofs/Kconfig"
+source "fs/erofs/Kconfig"
 
 endif # MISC_FILESYSTEMS
 
@@ -273,7 +282,7 @@ menuconfig NETWORK_FILESYSTEMS
 	bool "Network File Systems"
 	default y
 	depends on NET
-	---help---
+	help
 	  Say Y here to get to see options for network filesystems and
 	  filesystem-related networking code, such as NFS daemon and
 	  RPCSEC security modules.

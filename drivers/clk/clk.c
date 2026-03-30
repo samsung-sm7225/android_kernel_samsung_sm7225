@@ -54,6 +54,7 @@ struct clk_handoff_vdd {
 static LIST_HEAD(clk_handoff_vdd_list);
 static bool vdd_class_handoff_completed;
 static DEFINE_MUTEX(vdd_class_list_lock);
+
 /*
  * clk_rate_change_list is used during clk_core_set_rate_nolock() calls to
  * handle vdd_class vote tracking.  core->rate_change_node is added to
@@ -5354,6 +5355,10 @@ struct clk *__of_clk_get_from_provider(struct of_phandle_args *clkspec,
 
 	if (!clkspec)
 		return ERR_PTR(-EINVAL);
+
+	/* Check if node in clkspec is in disabled/fail state */
+	if (!of_device_is_available(clkspec->np))
+		return ERR_PTR(-ENOENT);
 
 	/* Check if we have such a provider in our array */
 	mutex_lock(&of_clk_mutex);

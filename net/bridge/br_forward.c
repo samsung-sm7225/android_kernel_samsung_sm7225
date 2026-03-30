@@ -146,7 +146,8 @@ void br_forward(const struct net_bridge_port *to,
 		goto out;
 
 	/* redirect to backup link if the destination port is down */
-	if (rcu_access_pointer(to->backup_port) && !netif_carrier_ok(to->dev)) {
+	if (rcu_access_pointer(to->backup_port) &&
+	    (!netif_carrier_ok(to->dev) || !netif_running(to->dev))) {
 		struct net_bridge_port *backup_port;
 
 		backup_port = rcu_dereference(to->backup_port);
@@ -264,7 +265,7 @@ static void maybe_deliver_addr(struct net_bridge_port *p, struct sk_buff *skb,
 	nskb = pskb_copy(skb, GFP_ATOMIC);
 	__skb_pull(skb, ETH_HLEN);
 	if (!nskb) {
-		DEV_STATS_INC(dev, tx_dropped);
+		dev->stats.tx_dropped++;
 		return;
 	}
 

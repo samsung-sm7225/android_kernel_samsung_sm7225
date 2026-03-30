@@ -494,7 +494,7 @@ static int ipvlan_process_v6_outbound(struct sk_buff *skb)
 
 	err = ipvlan_route_v6_outbound(dev, skb);
 	if (unlikely(err)) {
-		DEV_STATS_INC(dev, tx_errors);
+		dev->stats.tx_errors++;
 		kfree_skb(skb);
 		return err;
 	}
@@ -729,6 +729,9 @@ static rx_handler_result_t ipvlan_handle_mode_l2(struct sk_buff **pskb,
 	struct sk_buff *skb = *pskb;
 	struct ethhdr *eth = eth_hdr(skb);
 	rx_handler_result_t ret = RX_HANDLER_PASS;
+
+	if (unlikely(skb->pkt_type == PACKET_LOOPBACK))
+		return RX_HANDLER_PASS;
 
 	if (is_multicast_ether_addr(eth->h_dest)) {
 		if (ipvlan_external_frame(skb, port)) {

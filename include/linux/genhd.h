@@ -83,6 +83,8 @@ struct partition {
 	__le32 nr_sects;		/* nr of sectors in partition */
 } __attribute__((packed));
 
+#define FSYNC_TIME_GROUP_MAX 4
+#define IO_SIZE_GROUP_MAX 8
 struct disk_stats {
 	u64 nsecs[NR_STAT_GROUPS];
 	unsigned long sectors[NR_STAT_GROUPS];
@@ -91,6 +93,7 @@ struct disk_stats {
 	unsigned long io_ticks;
 	unsigned long time_in_queue;
 	unsigned long flush_ios;
+	unsigned long size_cnt[3][IO_SIZE_GROUP_MAX]; /* READs, WRITEs and DISCARDs */
 };
 
 #define PARTITION_META_INFO_VOLNAMELTH	64
@@ -188,6 +191,9 @@ struct accumulated_io_stats {
 	struct timespec uptime;
 	unsigned long sectors[3];	/* READ, WRITE, DISCARD */
 	unsigned long ios[3];
+	unsigned long size_cnt[3][IO_SIZE_GROUP_MAX];
+	unsigned long fsync_time_cnt[FSYNC_TIME_GROUP_MAX];
+	unsigned long iot;		/* sec */
 };
 
 struct gendisk {
@@ -225,6 +231,7 @@ struct gendisk {
 	atomic_t sync_io;		/* RAID */
 	struct disk_events *ev;
 	struct accumulated_io_stats accios;
+	unsigned long hiotime[3]; /* LOW, MID AND HIGH */
 #ifdef  CONFIG_BLK_DEV_INTEGRITY
 	struct kobject integrity_kobj;
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
@@ -428,15 +435,13 @@ static inline void free_part_info(struct hd_struct *part)
 	kfree(part->info);
 }
 
-/* block/blk-core.c */
-extern void part_round_stats(struct request_queue *q, int cpu, struct hd_struct *part);
+void update_io_ticks(struct hd_struct *part, unsigned long now);
 
 /* block/genhd.c */
-extern void device_add_disk(struct device *parent, struct gendisk *disk,
-			    const struct attribute_group **groups);
+extern void device_add_disk(struct device *parent, struct gendisk *disk);
 static inline void add_disk(struct gendisk *disk)
 {
-	device_add_disk(NULL, disk, NULL);
+	device_add_disk(NULL, disk);
 }
 extern void device_add_disk_no_queue_reg(struct device *parent, struct gendisk *disk);
 static inline void add_disk_no_queue_reg(struct gendisk *disk)

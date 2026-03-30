@@ -21,6 +21,7 @@
 #include <linux/seccomp.h>
 #include <linux/nodemask.h>
 #include <linux/rcupdate.h>
+#include <linux/refcount.h>
 #include <linux/resource.h>
 #include <linux/latencytop.h>
 #include <linux/sched/prio.h>
@@ -29,6 +30,7 @@
 #include <linux/mm_event.h>
 #include <linux/task_io_accounting.h>
 #include <linux/rseq.h>
+#include <linux/android_kabi.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -50,7 +52,6 @@ struct reclaim_state;
 struct capture_control;
 struct robust_list_head;
 struct sched_attr;
-struct sched_param;
 struct seq_file;
 struct sighand_struct;
 struct signal_struct;
@@ -365,6 +366,10 @@ enum uclamp_id {
 	UCLAMP_CNT
 };
 
+struct sched_param {
+	int sched_priority;
+};
+
 struct sched_info {
 #ifdef CONFIG_SCHED_INFO
 	/* Cumulative counters: */
@@ -559,6 +564,11 @@ struct sched_entity {
 	 */
 	struct sched_avg		avg;
 #endif
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
 };
 
 struct sched_load {
@@ -677,6 +687,11 @@ struct sched_rt_entity {
 	/* rq "owned" by this entity/group: */
 	struct rt_rq			*my_q;
 #endif
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
 } __randomize_layout;
 
 struct sched_dl_entity {
@@ -723,6 +738,7 @@ struct sched_dl_entity {
 	 * overruns.
 	 */
 	unsigned int			dl_throttled      : 1;
+	unsigned int			dl_boosted        : 1;
 	unsigned int			dl_yielded        : 1;
 	unsigned int			dl_non_contending : 1;
 	unsigned int			dl_overrun	  : 1;
@@ -828,7 +844,7 @@ struct task_struct {
 	randomized_struct_fields_start
 
 	void				*stack;
-	atomic_t			usage;
+	refcount_t			usage;
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
 	unsigned int			ptrace;
@@ -890,9 +906,6 @@ struct task_struct {
 #ifdef CONFIG_CGROUP_SCHED
 	struct task_group		*sched_task_group;
 #endif
-#ifdef CONFIG_SCHED_TUNE
-	int				stune_idx;
-#endif
 	struct sched_dl_entity		dl;
 
 #ifdef CONFIG_UCLAMP_TASK
@@ -930,6 +943,14 @@ struct task_struct {
 	int				rcu_tasks_idle_cpu;
 	struct list_head		rcu_tasks_holdout_list;
 #endif /* #ifdef CONFIG_TASKS_RCU */
+
+#ifdef CONFIG_TASKS_TRACE_RCU
+	int				trc_reader_nesting;
+	int				trc_ipi_to_cpu;
+	bool				trc_reader_need_end;
+	bool				trc_reader_checked;
+	struct list_head		trc_holdout_list;
+#endif /* #ifdef CONFIG_TASKS_TRACE_RCU */
 
 	struct sched_info		sched_info;
 
@@ -1270,8 +1291,6 @@ struct task_struct {
 #endif
 	struct list_head		pi_state_list;
 	struct futex_pi_state		*pi_state_cache;
-	struct mutex			futex_exit_mutex;
-	unsigned int			futex_state;
 #endif
 #ifdef CONFIG_PERF_EVENTS
 	struct perf_event_context	*perf_event_ctxp[perf_nr_task_contexts];
@@ -1350,7 +1369,10 @@ struct task_struct {
 
 	struct tlbflush_unmap_batch	tlb_ubc;
 
-	struct rcu_head			rcu;
+	union {
+		refcount_t		rcu_users;
+		struct rcu_head		rcu;
+	};
 
 	/* Cache last used pipe for splice(): */
 	struct pipe_inode_info		*splice_pipe;
@@ -1490,6 +1512,32 @@ struct task_struct {
 #endif
 	/* task is frozen/stopped (used by the cgroup freezer) */
 	ANDROID_KABI_USE(1, unsigned frozen:1);
+
+	/* 095444fad7e3 ("futex: Replace PF_EXITPIDONE with a state") */
+	ANDROID_KABI_USE(2, unsigned int futex_state);
+
+	/*
+	 * f9b0c6c556db ("futex: Add mutex around futex exit")
+	 * A struct mutex takes 32 bytes, or 4 64bit entries, so pick off
+	 * 4 of the reserved members, and replace them with a struct mutex.
+	 * Do the GENKSYMS hack to work around the CRC issues
+	 */
+#ifdef __GENKSYMS__
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
+	ANDROID_KABI_RESERVE(5);
+	ANDROID_KABI_RESERVE(6);
+#else
+	struct mutex			futex_exit_mutex;
+#endif
+
+	/* bca62a0ae565 ("sched/tune: Fix improper accounting of tasks") */
+#ifdef CONFIG_SCHED_TUNE
+	ANDROID_KABI_USE(7, int stune_idx);
+#else
+	ANDROID_KABI_RESERVE(7);
+#endif
+	ANDROID_KABI_RESERVE(8);
 
 	/*
 	 * New fields for task_struct should be added above here, so that
@@ -1687,6 +1735,7 @@ extern struct pid *cad_pid;
 #define PF_RANDOMIZE		0x00400000	/* Randomize virtual address space */
 #define PF_SWAPWRITE		0x00800000	/* Allowed to write to swap */
 #define PF_MEMSTALL		0x01000000	/* Stalled due to lack of memory */
+#define PF_UMH			0x02000000	/* I'm an Usermodehelper process */
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_allowed */
 #define PF_MCE_EARLY		0x08000000      /* Early kill for mce process policy */
 #define PF_WAKE_UP_IDLE         0x10000000	/* TTWU on an idle CPU */
@@ -1832,6 +1881,9 @@ extern int idle_cpu(int cpu);
 extern int available_idle_cpu(int cpu);
 extern int sched_setscheduler(struct task_struct *, int, const struct sched_param *);
 extern int sched_setscheduler_nocheck(struct task_struct *, int, const struct sched_param *);
+extern int sched_set_fifo(struct task_struct *p);
+extern int sched_set_fifo_low(struct task_struct *p);
+extern int sched_set_normal(struct task_struct *p, int nice);
 extern int sched_setattr(struct task_struct *, const struct sched_attr *);
 extern int sched_setattr_nocheck(struct task_struct *, const struct sched_attr *);
 extern struct task_struct *idle_task(int cpu);

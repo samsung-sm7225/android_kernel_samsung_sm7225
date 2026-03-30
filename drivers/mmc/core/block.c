@@ -952,7 +952,7 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 	if (idata->ic.postsleep_min_us)
 		usleep_range(idata->ic.postsleep_min_us, idata->ic.postsleep_max_us);
 
-	if (idata->rpmb || (cmd.flags & MMC_RSP_BUSY)) {
+	if (idata->rpmb || (cmd.flags & MMC_RSP_R1B) == MMC_RSP_R1B) {
 		/*
 		 * Ensure RPMB/R1B command has completed by polling CMD13
 		 * "Send Status".
@@ -2354,12 +2354,14 @@ static void mmc_blk_mq_dec_in_flight(struct mmc_queue *mq,
 				     struct request_queue *q,
 				     enum mmc_issue_type issue_type)
 {
+	struct mmc_host *host = mq->card->host;
 	unsigned long flags;
 	bool put_card;
 
 	spin_lock_irqsave(q->queue_lock, flags);
 
 	mq->in_flight[issue_type] -= 1;
+	atomic_dec(&host->active_reqs);
 
 	put_card = (mmc_tot_in_flight(mq) == 0);
 
@@ -3091,7 +3093,7 @@ static int mmc_add_disk(struct mmc_blk_data *md)
 	int ret;
 	struct mmc_card *card = md->queue.card;
 
-	device_add_disk(md->parent, md->disk, NULL);
+	device_add_disk(md->parent, md->disk);
 	md->force_ro.show = force_ro_show;
 	md->force_ro.store = force_ro_store;
 	sysfs_attr_init(&md->force_ro.attr);

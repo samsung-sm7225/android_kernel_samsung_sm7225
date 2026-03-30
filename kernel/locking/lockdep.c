@@ -756,7 +756,6 @@ static bool assign_lock_key(struct lockdep_map *lock)
 		pr_err("INFO: trying to register non-static key.\n");
 		pr_err("The code is fine but needs lockdep annotation, or maybe\n");
 		pr_err("you didn't initialize this object before use?\n");
-		pr_err("turning off the locking correctness validator.\n");
 		dump_stack();
 		return false;
 	}
@@ -3995,8 +3994,7 @@ void lock_acquire(struct lockdep_map *lock, unsigned int subclass,
 }
 EXPORT_SYMBOL_GPL(lock_acquire);
 
-void lock_release(struct lockdep_map *lock, int nested,
-			  unsigned long ip)
+void lock_release(struct lockdep_map *lock, unsigned long ip)
 {
 	unsigned long flags;
 

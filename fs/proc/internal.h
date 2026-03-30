@@ -82,6 +82,7 @@ union proc_op {
 	int (*proc_show)(struct seq_file *m,
 		struct pid_namespace *ns, struct pid *pid,
 		struct task_struct *task);
+	const char *lsm;
 };
 
 struct proc_inode {
@@ -332,7 +333,6 @@ struct proc_filemap_private {
 };
 
 extern const struct file_operations proc_pid_filemap_list_operations;
-extern const struct file_operations proc_pid_filemap_info_operations;
 extern const struct file_operations proc_pid_io_record_operations;
 #endif
 

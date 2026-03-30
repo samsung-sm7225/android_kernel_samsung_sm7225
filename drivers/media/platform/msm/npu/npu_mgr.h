@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _NPU_MGR_H
@@ -85,6 +86,7 @@ struct npu_network {
 	bool is_valid;
 	bool is_active;
 	bool is_unloading;
+	bool is_executing;
 	bool fw_error;
 	struct npu_client *client;
 	struct list_head cmd_list;
@@ -131,6 +133,7 @@ struct npu_host_ctx {
 	uint32_t err_irq_sts;
 	uint32_t wdg_irq_sts;
 	bool fw_error;
+	bool dev_shuttingdown;
 	bool cancel_work;
 	bool app_crashed;
 	struct notifier_block nb;

@@ -295,6 +295,9 @@ static void __cqhci_enable(struct cqhci_host *cq_host)
 	cqcfg |= CQHCI_ENABLE;
 	cqhci_writel(cq_host, cqcfg, CQHCI_CFG);
 
+	if (cqhci_readl(cq_host, CQHCI_CTL) & CQHCI_HALT)
+		cqhci_writel(cq_host, 0, CQHCI_CTL);
+
 	cqhci_writel(cq_host, lower_32_bits(cq_host->desc_dma_base),
 		     CQHCI_TDLBA);
 	cqhci_writel(cq_host, upper_32_bits(cq_host->desc_dma_base),
@@ -372,8 +375,9 @@ static int cqhci_enable(struct mmc_host *mmc, struct mmc_card *card)
 	err = cqhci_host_alloc_tdl(cq_host);
 	if (err)
 		return err;
-    if (cqhci_host_is_crypto_supported(cq_host))
-        cqhci_crypto_enable(cq_host);
+
+	if (cqhci_host_is_crypto_supported(cq_host))
+        	cqhci_crypto_enable(cq_host);
 
 	__cqhci_enable(cq_host);
 
@@ -680,7 +684,7 @@ static int cqhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		mmc->cqe_on = true;
 		mmc_log_string(mmc, "cqhci: CQE on\n");
 		pr_debug("%s: cqhci: CQE on\n", mmc_hostname(mmc));
-		if (cqhci_readl(cq_host, CQHCI_CTL) && CQHCI_HALT) {
+		if (cqhci_readl(cq_host, CQHCI_CTL) & CQHCI_HALT) {
 			pr_err("%s: cqhci: CQE failed to exit halt state\n",
 			       mmc_hostname(mmc));
 		}

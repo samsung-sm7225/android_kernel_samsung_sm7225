@@ -294,8 +294,15 @@ static void remove_dmabuf_list(struct kgsl_dma_buf_meta *meta)
 }
 
 #ifdef CONFIG_DMA_SHARED_BUFFER
-static void kgsl_destroy_ion(struct kgsl_dma_buf_meta *meta)
+static void kgsl_destroy_ion(struct kgsl_memdesc *memdesc)
 {
+	struct kgsl_mem_entry *entry = container_of(memdesc,
+				struct kgsl_mem_entry, memdesc);
+	struct kgsl_dma_buf_meta *meta = entry->priv_data;
+
+	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
+		return;
+
 	if (meta != NULL) {
 		remove_dmabuf_list(meta);
 		dma_buf_unmap_attachment(meta->attach, meta->table,
@@ -309,6 +316,26 @@ static void kgsl_destroy_ion(struct kgsl_dma_buf_meta *meta)
 static void kgsl_destroy_ion(struct kgsl_dma_buf_meta *meta)
 {
 
+	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
+		return;
+
+	for_each_sg(memdesc->sgt->sgl, sg, memdesc->sgt->nents, i) {
+		page = sg_page(sg);
+		for (j = 0; j < (sg->length >> PAGE_SHIFT); j++) {
+			/*
+			 * Mark the page in the scatterlist as dirty if they
+			 * were writable by the GPU.
+			 */
+			if (!(memdesc->flags & KGSL_MEMFLAGS_GPUREADONLY))
+				set_page_dirty_lock(nth_page(page, j));
+
+			/*
+			 * Put the page reference taken using get_user_pages
+			 * during memdesc_sg_virt.
+			 */
+			put_page(nth_page(page, j));
+		}
+	}
 }
 #endif
 
@@ -2278,6 +2305,133 @@ done:
 	return result;
 }
 
+long kgsl_ioctl_gpu_aux_command(struct kgsl_device_private *dev_priv,
+		unsigned int cmd, void *data)
+{
+	struct kgsl_gpu_aux_command *param = data;
+	struct kgsl_device *device = dev_priv->device;
+	struct kgsl_context *context;
+	struct kgsl_drawobj **drawobjs;
+	struct kgsl_drawobj_sync *tsobj;
+	void __user *cmdlist;
+	u32 queued, count;
+	int i, index = 0;
+	long ret;
+	struct kgsl_gpu_aux_command_generic generic;
+
+	/* We support only one aux command */
+	if (param->numcmds != 1)
+		return -EINVAL;
+
+	if (!(param->flags & KGSL_GPU_AUX_COMMAND_TIMELINE))
+		return -EINVAL;
+
+	if ((param->flags & KGSL_GPU_AUX_COMMAND_SYNC) &&
+		(param->numsyncs > KGSL_MAX_SYNCPOINTS))
+		return -EINVAL;
+
+	context = kgsl_context_get_owner(dev_priv, param->context_id);
+	if (!context)
+		return -EINVAL;
+
+	/*
+	 * param->numcmds is always one and we have one additional drawobj
+	 * for the timestamp sync if KGSL_GPU_AUX_COMMAND_SYNC flag is passed.
+	 * On top of that we make an implicit sync object for the last queued
+	 * timestamp on this context.
+	 */
+	count = (param->flags & KGSL_GPU_AUX_COMMAND_SYNC) ? 3 : 2;
+
+	drawobjs = kvcalloc(count, sizeof(*drawobjs), GFP_KERNEL);
+
+	if (!drawobjs) {
+		kgsl_context_put(context);
+		return -ENOMEM;
+	}
+
+	trace_kgsl_aux_command(context->id, param->numcmds, param->flags,
+		param->timestamp);
+
+	if (param->flags & KGSL_GPU_AUX_COMMAND_SYNC) {
+		struct kgsl_drawobj_sync *syncobj =
+			kgsl_drawobj_sync_create(device, context);
+
+		if (IS_ERR(syncobj)) {
+			ret = PTR_ERR(syncobj);
+			goto err;
+		}
+
+		drawobjs[index++] = DRAWOBJ(syncobj);
+
+		ret = kgsl_drawobj_sync_add_synclist(device, syncobj,
+				u64_to_user_ptr(param->synclist),
+				param->syncsize, param->numsyncs);
+		if (ret)
+			goto err;
+	}
+
+	kgsl_readtimestamp(device, context, KGSL_TIMESTAMP_QUEUED, &queued);
+
+	/*
+	 * Make an implicit sync object for the last queued timestamp on this
+	 * context
+	 */
+	tsobj = kgsl_drawobj_create_timestamp_syncobj(device,
+		context, queued);
+
+	if (IS_ERR(tsobj)) {
+		ret = PTR_ERR(tsobj);
+		goto err;
+	}
+
+	drawobjs[index++] = DRAWOBJ(tsobj);
+
+	cmdlist = u64_to_user_ptr(param->cmdlist);
+
+	/* Create a draw object for KGSL_GPU_AUX_COMMAND_TIMELINE */
+	if (copy_struct_from_user(&generic, sizeof(generic),
+		cmdlist, param->cmdsize)) {
+		ret = -EFAULT;
+		goto err;
+	}
+
+	if (generic.type == KGSL_GPU_AUX_COMMAND_TIMELINE) {
+		struct kgsl_drawobj_timeline *timelineobj;
+
+		timelineobj = kgsl_drawobj_timeline_create(device,
+			context);
+
+		if (IS_ERR(timelineobj)) {
+			ret = PTR_ERR(timelineobj);
+			goto err;
+		}
+
+		drawobjs[index++] = DRAWOBJ(timelineobj);
+
+		ret = kgsl_drawobj_add_timeline(dev_priv, timelineobj,
+			u64_to_user_ptr(generic.priv), generic.size);
+		if (ret)
+			goto err;
+	} else {
+		ret = -EINVAL;
+		goto err;
+	}
+
+	ret = device->ftbl->queue_cmds(dev_priv, context,
+		drawobjs, index, &param->timestamp);
+
+err:
+	kgsl_context_put(context);
+
+	if (ret && ret != -EPROTO) {
+		for (i = 0; i < count; i++)
+			kgsl_drawobj_destroy(drawobjs[i]);
+	}
+
+	kvfree(drawobjs);
+	return ret;
+}
+
 long kgsl_ioctl_cmdstream_readtimestamp_ctxtid(struct kgsl_device_private
 						*dev_priv, unsigned int cmd,
 						void *data)
@@ -2636,15 +2790,15 @@ static int memdesc_sg_virt(struct kgsl_memdesc *memdesc, unsigned long useraddr)
 		goto out;
 	}
 
-	down_read(&current->mm->mmap_sem);
+	mmap_read_lock(current->mm);
 	if (!check_vma(useraddr, memdesc->size)) {
-		up_read(&current->mm->mmap_sem);
+		mmap_read_unlock(current->mm);
 		ret = -EFAULT;
 		goto out;
 	}
 
 	npages = get_user_pages(useraddr, sglen, write, pages, NULL);
-	up_read(&current->mm->mmap_sem);
+	mmap_read_unlock(current->mm);
 
 	ret = (npages < 0) ? (int)npages : 0;
 	if (ret)
@@ -2755,7 +2909,7 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 	 * Find the VMA containing this pointer and figure out if it
 	 * is a dma-buf.
 	 */
-	down_read(&current->mm->mmap_sem);
+	mmap_read_lock(current->mm);
 	vma = find_vma(current->mm, hostptr);
 
 	if (vma && vma->vm_file) {
@@ -2763,7 +2917,7 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 
 		ret = check_vma_flags(vma, entry->memdesc.flags);
 		if (ret) {
-			up_read(&current->mm->mmap_sem);
+			mmap_read_unlock(current->mm);
 			return ret;
 		}
 
@@ -2772,7 +2926,7 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 		 * already mapped
 		 */
 		if (vma->vm_ops == &kgsl_gpumem_vm_ops) {
-			up_read(&current->mm->mmap_sem);
+			mmap_read_unlock(current->mm);
 			return -EFAULT;
 		}
 
@@ -2781,7 +2935,7 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 		if (fd) {
 			dmabuf = dma_buf_get(fd - 1);
 			if (IS_ERR(dmabuf)) {
-				up_read(&current->mm->mmap_sem);
+				mmap_read_unlock(current->mm);
 				return PTR_ERR(dmabuf);
 			}
 			/*
@@ -2793,21 +2947,21 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 			 */
 			if (dmabuf != vma->vm_file->private_data) {
 				dma_buf_put(dmabuf);
-				up_read(&current->mm->mmap_sem);
+				mmap_read_unlock(current->mm);
 				return -EBADF;
 			}
 		}
 	}
 
 	if (IS_ERR_OR_NULL(dmabuf)) {
-		up_read(&current->mm->mmap_sem);
+		mmap_read_unlock(current->mm);
 		return dmabuf ? PTR_ERR(dmabuf) : -ENODEV;
 	}
 
 	ret = kgsl_setup_dma_buf(device, pagetable, entry, dmabuf);
 	if (ret) {
 		dma_buf_put(dmabuf);
-		up_read(&current->mm->mmap_sem);
+		mmap_read_unlock(current->mm);
 		return ret;
 	}
 
@@ -2819,7 +2973,7 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 	else
 		entry->memdesc.flags &= ~((u64) KGSL_MEMFLAGS_IOCOHERENT);
 
-	up_read(&current->mm->mmap_sem);
+	mmap_read_unlock(current->mm);
 	return 0;
 }
 #else
@@ -4754,7 +4908,7 @@ static void kgsl_gpumem_vm_open(struct vm_area_struct *vma)
 	atomic_inc(&entry->map_count);
 }
 
-static int
+static vm_fault_t
 kgsl_gpumem_vm_fault(struct vm_fault *vmf)
 {
 	struct kgsl_mem_entry *entry = vmf->vma->vm_private_data;
@@ -5432,6 +5586,9 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	if (status)
 		goto error_close_mmu;
 
+	idr_init(&device->timelines);
+	spin_lock_init(&device->timelines_lock);
+
 	/*
 	 * The default request type PM_QOS_REQ_ALL_CORES is
 	 * applicable to all CPU cores that are online and
@@ -5513,6 +5670,7 @@ void kgsl_device_platform_remove(struct kgsl_device *device)
 		pm_qos_remove_request(&device->pwrctrl.l2pc_cpus_qos);
 
 	idr_destroy(&device->context_idr);
+	idr_destroy(&device->timelines);
 
 	kgsl_mmu_close(device);
 

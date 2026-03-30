@@ -177,31 +177,7 @@ struct gadget_config_name {
 	struct list_head list;
 };
 
-#define MAX_USB_STRING_LEN	126
-#define MAX_USB_STRING_WITH_NULL_LEN	(MAX_USB_STRING_LEN+1)
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
-int dwc3_gadget_get_cmply_link_state_wrapper(void)
-{
-	struct gadget_info *dev;
-	struct usb_composite_dev *cdev;
-	struct usb_gadget		*gadget;
-	int ret = -ENODEV;
-
-	if (android_device && !IS_ERR(android_device)) {
-		dev = dev_get_drvdata(android_device);
-		cdev = &dev->cdev;
-		if (cdev) {
-		 	gadget = cdev->gadget;
-			 if (gadget)
-				ret = dwc3_gadget_get_cmply_link_state(gadget);
-			 else
-			 	pr_err("usb: %s:gadget pointer is null\n", __func__);
-		 }
-	}
-	return ret;
-}
-EXPORT_SYMBOL(dwc3_gadget_get_cmply_link_state_wrapper);
-#endif
+#define USB_MAX_STRING_WITH_NULL_LEN	(USB_MAX_STRING_LEN+1)
 
 static int usb_string_copy(const char *s, char **s_copy)
 {
@@ -210,7 +186,7 @@ static int usb_string_copy(const char *s, char **s_copy)
 	char *copy = *s_copy;
 
 	ret = strlen(s);
-	if (ret > MAX_USB_STRING_LEN)
+	if (ret > USB_MAX_STRING_LEN)
 		return -EOVERFLOW;
 	if (ret < 1)
 		return -EINVAL;
@@ -218,11 +194,11 @@ static int usb_string_copy(const char *s, char **s_copy)
 	if (copy) {
 		str = copy;
 	} else {
-		str = kmalloc(MAX_USB_STRING_WITH_NULL_LEN, GFP_KERNEL);
+		str = kmalloc(USB_MAX_STRING_WITH_NULL_LEN, GFP_KERNEL);
 		if (!str)
 			return -ENOMEM;
 	}
-	strlcpy(str, s, MAX_USB_STRING_WITH_NULL_LEN);
+	strcpy(str, s);
 	if (str[ret - 1] == '\n')
 		str[ret - 1] = '\0';
 	*s_copy = str;
@@ -964,6 +940,8 @@ static ssize_t os_desc_qw_sign_store(struct config_item *item, const char *page,
 	struct gadget_info *gi = os_desc_item_to_gadget_info(item);
 	int res, l;
 
+	if (!len)
+		return len;
 	l = min((int)len, OS_STRING_QW_SIGN_LEN >> 1);
 	if (page[l - 1] == '\n')
 		--l;
@@ -1470,6 +1448,8 @@ static int configfs_composite_bind(struct usb_gadget *gadget,
 		cdev->use_os_string = true;
 		cdev->b_vendor_code = gi->b_vendor_code;
 		memcpy(cdev->qw_sign, gi->qw_sign, OS_STRING_QW_SIGN_LEN);
+	} else {
+		cdev->use_os_string = false;
 	}
 
 	if (gadget_is_otg(gadget) && !otg_desc[0]) {

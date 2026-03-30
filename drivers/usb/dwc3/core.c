@@ -417,6 +417,10 @@ int dwc3_event_buffers_setup(struct dwc3 *dwc)
 	dwc3_writel(dwc->regs, DWC3_GEVNTSIZ(0),
 			DWC3_GEVNTSIZ_SIZE(evt->length));
 
+	/* Clear any stale event */
+	reg = dwc3_readl(dwc->regs, DWC3_GEVNTCOUNT(0));
+	dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(0), reg);
+
 	/* setup GSI related event buffers */
 	dwc3_notify_event(dwc, DWC3_GSI_EVT_BUF_SETUP, 0);
 
@@ -449,6 +453,10 @@ void dwc3_event_buffers_cleanup(struct dwc3 *dwc)
 	dwc3_writel(dwc->regs, DWC3_GEVNTADRHI(0), 0);
 	dwc3_writel(dwc->regs, DWC3_GEVNTSIZ(0), DWC3_GEVNTSIZ_INTMASK
 			| DWC3_GEVNTSIZ_SIZE(0));
+
+	/* Clear any stale event */
+	reg = dwc3_readl(dwc->regs, DWC3_GEVNTCOUNT(0));
+	dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(0), reg);
 
 	/* cleanup GSI related event buffers */
 	dwc3_notify_event(dwc, DWC3_GSI_EVT_BUF_CLEANUP, 0);

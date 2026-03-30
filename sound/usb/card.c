@@ -809,7 +809,6 @@ static void usb_audio_disconnect(struct usb_interface *intf)
 	struct snd_card *card;
 	struct list_head *p;
 
-	pr_info("%s : disconnect!\n", __func__);
 	if (chip == USB_AUDIO_IFACE_UNUSED)
 		return;
 
@@ -820,7 +819,7 @@ static void usb_audio_disconnect(struct usb_interface *intf)
 #ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
 	send_usb_audio_uevent(chip->dev, card->number, 0);
 	set_usb_audio_cardnum(chip->card->number, 0, 0);
-#endif		
+#endif
 
 	mutex_lock(&register_mutex);
 	if (atomic_inc_return(&chip->shutdown) == 1) {
