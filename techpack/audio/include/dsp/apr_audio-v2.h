@@ -12274,6 +12274,15 @@ enum {
 
 struct afe_set_clk_drift {
 	/*
+	 * Clock ID
+	 *	@values
+	 *	- 0x100 to 0x10E
+	 *	- 0x200 to 0x20C
+	 *	- 0x500 to 0x505
+	 */
+	uint32_t clk_id;
+
+	/*
 	 * Clock drift  (in PPB) to be set.
 	 *	@values
 	 *	- need to get values from DSP team

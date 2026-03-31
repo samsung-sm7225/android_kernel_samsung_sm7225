@@ -248,10 +248,6 @@ extern struct sde_dbg_reglog *sde_dbg_base_reglog;
 #define SDE_DBG_CTRL(...) sde_dbg_ctrl(__func__, ##__VA_ARGS__, \
 		SDE_DBG_DUMP_DATA_LIMITER)
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
 /**
  * sde_evtlog_init - allocate a new event log object
  * Returns:	evtlog or -ERROR

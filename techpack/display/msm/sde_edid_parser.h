@@ -91,13 +91,10 @@ struct sde_edid_ctrl {
 	char vendor_id[EDID_VENDOR_ID_SIZE];
 	struct sde_edid_sink_caps sink_caps;
 	struct sde_edid_hdr_data hdr_data;
-<<<<<<< HEAD
 	struct sink_hdmi_vsdb_block hdmi_vsdb;
-=======
 #if defined(CONFIG_SEC_DISPLAYPORT)
 	int audio_channel_info;
 #endif
->>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
 };
 
 /**

@@ -215,10 +215,7 @@ struct sde_dbg_regbuf {
 /**
  * struct sde_dbg_base - global sde debug base structure
  * @evtlog: event log instance
-<<<<<<< HEAD
  * @reglog: reg log instance
-=======
->>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
  * @reg_dump_base: base address of register dump region
  * @reg_base_list: list of register dumping regions
  * @dev: device pointer
@@ -3311,11 +3308,7 @@ static void _sde_dbg_dump_sde_dbg_bus(struct sde_dbg_sde_debug_bus *bus)
 
 	if (in_mem) {
 		if (!(*dump_mem))
-<<<<<<< HEAD
 			*dump_mem =  vzalloc(list_size);
-=======
-			*dump_mem = vzalloc(list_size);
->>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
 
 		if (*dump_mem) {
 			dump_addr = *dump_mem;
@@ -3474,11 +3467,7 @@ static void _sde_dbg_dump_vbif_dbg_bus(struct sde_dbg_vbif_debug_bus *bus)
 
 	if (in_mem) {
 		if (!(*dump_mem))
-<<<<<<< HEAD
 			*dump_mem =  vzalloc(list_size);
-=======
-			*dump_mem = vzalloc(list_size);
->>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
 
 		if (*dump_mem) {
 			dump_addr = *dump_mem;
@@ -3764,8 +3753,6 @@ void sde_dbg_ctrl(const char *name, ...)
 	va_end(args);
 }
 
-<<<<<<< HEAD
-=======
 #if defined(CONFIG_DISPLAY_SAMSUNG)
 void ss_sde_dbg_debugfs_open(void)
 {
@@ -3806,7 +3793,6 @@ ssize_t ss_sde_evtlog_dump_read(struct file *file, char __user *buff,
 }
 #endif
 
->>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
 #ifdef CONFIG_DEBUG_FS
 /*
  * sde_dbg_debugfs_open - debugfs open handler for evtlog dump
@@ -4874,19 +4860,6 @@ static void sde_dbg_reg_base_destroy(void)
 		kfree(blk_base);
 	}
 	vfree(dbg_base->reg_dump_base);
-<<<<<<< HEAD
-=======
-}
-
-static void sde_dbg_buses_destroy(void)
-{
-	struct sde_dbg_base *dbg_base = &sde_dbg_base;
-
-	vfree(dbg_base->dbgbus_sde.cmn.dumped_content);
-	vfree(dbg_base->dbgbus_vbif_rt.cmn.dumped_content);
-	/*vfree(dbg_base->dbgbus_dsi.cmn.dumped_content); Not merged yet */
-	/*vfree(dbg_base->dbgbus_lutdma.cmn.dumped_content); Not merged yet */
->>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
 }
 
 static void sde_dbg_buses_destroy(void)

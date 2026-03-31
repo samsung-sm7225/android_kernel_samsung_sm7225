@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
-<<<<<<< HEAD
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
-=======
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
->>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
  */
 
 #define pr_fmt(fmt)	"sde_dbg:[%s] " fmt, __func__
@@ -358,7 +353,6 @@ void sde_evtlog_destroy(struct sde_dbg_evtlog *evtlog)
 		kfree(filter_node);
 	}
 	vfree(evtlog);
-<<<<<<< HEAD
 }
 
 void sde_reglog_destroy(struct sde_dbg_reglog *reglog)
@@ -367,6 +361,4 @@ void sde_reglog_destroy(struct sde_dbg_reglog *reglog)
 		return;
 
 	vfree(reglog);
-=======
->>>>>>> 1f0177c1eaf7 (techpack: Add Samsung M236BXXSBEYH2 changes)
 }

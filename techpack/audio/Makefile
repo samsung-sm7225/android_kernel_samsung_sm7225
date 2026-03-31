@@ -50,26 +50,6 @@ ifeq ($(CONFIG_ARCH_SDM660), y)
 include $(srctree)/techpack/audio/config/sdm660auto.conf
 export $(shell sed 's/=.*//' $(srctree)/techpack/audio/config/sdm660auto.conf)
 endif
-ifeq ($(CONFIG_ARCH_LITO), y)
-ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),a42xq a42xuq))
-include $(srctree)/techpack/audio/config/lito_a42.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),a52xq))
-include $(srctree)/techpack/audio/config/lito_a52.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),m62xq))
-include $(srctree)/techpack/audio/config/lito_m62.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),m42xq))
-include $(srctree)/techpack/audio/config/lito_m42.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),m52xq))
-include $(srctree)/techpack/audio/config/lito_m52.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),gts7xllite gts7xllitewifi))
-include $(srctree)/techpack/audio/config/lito_gts7plite.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),m23xq))
-include $(srctree)/techpack/audio/config/lito_m23.conf
-else
-include $(srctree)/techpack/audio/config/litoauto.conf
-endif
-export
-endif
 
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE     += \

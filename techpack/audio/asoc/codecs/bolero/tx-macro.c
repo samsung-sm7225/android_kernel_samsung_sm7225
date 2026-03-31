@@ -190,6 +190,11 @@ struct tx_macro_priv {
 	bool bcs_clk_en;
 	bool hs_slow_insert_complete;
 	int pcm_rate[NUM_DECIMATORS];
+	int amic_sample_rate;
+	u32 dmic_rate_override;
+
+	struct regulator *sub_dmic_bias;
+	struct regulator *thi_dmic_bias;
 };
 
 static const char * const dmic_rate_override_text[] = {
