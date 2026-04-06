@@ -102,7 +102,7 @@ DTBO_BUILD() {
 }
 
 CLANG_BUILD() {
-	CLANG="${HOME}/linux-x86-main/clang-r487747c/bin"
+	CLANG="${HOME}/linux-x86-main/clang-r563880/bin"
 	export CLANG_TRIPLE=aarch64-linux-gnu-
 	export PATH="$CLANG:$PATH"
 	set -x
