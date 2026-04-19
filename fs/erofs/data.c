@@ -361,4 +361,3 @@ const struct address_space_operations erofs_raw_access_aops = {
 	.readpages = erofs_raw_access_readpages,
 	.bmap = erofs_bmap,
 };
-

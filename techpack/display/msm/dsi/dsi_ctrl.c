@@ -2149,7 +2149,6 @@ static struct platform_driver dsi_ctrl_driver = {
 	},
 };
 
-#if defined(CONFIG_DEBUG_FS)
 
 void dsi_ctrl_debug_dump(u32 *entries, u32 size)
 {
@@ -2822,6 +2821,7 @@ static irqreturn_t dsi_ctrl_isr(int irq, void *ptr)
 static int _dsi_ctrl_setup_isr(struct dsi_ctrl *dsi_ctrl)
 {
 	int irq_num, rc;
+	uint32_t intr_idx;
 
 	if (!dsi_ctrl)
 		return -EINVAL;
@@ -2832,6 +2832,22 @@ static int _dsi_ctrl_setup_isr(struct dsi_ctrl *dsi_ctrl)
 	init_completion(&dsi_ctrl->irq_info.vid_frame_done);
 	init_completion(&dsi_ctrl->irq_info.cmd_frame_done);
 	init_completion(&dsi_ctrl->irq_info.bta_done);
+
+	/* If there is unbalanced refcount for any interrupt, irq_stat_mask
+	 * does not get clear during suspend. On resume, enable irq is not
+	 * called leading to ctrl ISR permanently disabled. This is a defensive
+	 * check to recover from such scenario.
+	 */
+	for (intr_idx = DSI_SINT_CMD_MODE_DMA_DONE;
+	     intr_idx < DSI_STATUS_INTERRUPT_COUNT; intr_idx++) {
+		if (dsi_ctrl->irq_info.irq_stat_refcount[intr_idx]) {
+			DSI_CTRL_ERR(dsi_ctrl,
+				     "refcount mismatch: intr_idx %d\n",
+				     intr_idx);
+			dsi_ctrl->irq_info.irq_stat_refcount[intr_idx] = 0;
+		}
+	}
+	dsi_ctrl->irq_info.irq_stat_mask = 0x0;
 
 	irq_num = platform_get_irq(dsi_ctrl->pdev, 0);
 	if (irq_num < 0) {
@@ -2867,6 +2883,7 @@ static void _dsi_ctrl_destroy_isr(struct dsi_ctrl *dsi_ctrl)
 		devm_free_irq(&dsi_ctrl->pdev->dev,
 				dsi_ctrl->irq_info.irq_num, dsi_ctrl);
 		dsi_ctrl->irq_info.irq_num = -1;
+		dsi_ctrl->irq_info.irq_stat_mask = 0x0;
 	}
 }
 

@@ -172,6 +172,9 @@ typedef PREPACK struct {
 #define HTC_UNKNOWN_MSG_MESSAGEID_LSB                 0
 #define HTC_UNKNOWN_MSG_MESSAGEID_MASK                0x0000ffff
 #define HTC_UNKNOWN_MSG_MESSAGEID_OFFSET              0x00000000
+#define HTC_UNKNOWN_MSG_METADATA_LSB                  16
+#define HTC_UNKNOWN_MSG_METADATA_MASK                 0X00ff0000
+#define HTC_UNKNOWN_MSG_METADATA_OFFSET               0x00000000
 
 /* HTC ready message
  * direction : target-to-host  */

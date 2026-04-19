@@ -138,6 +138,9 @@ teql_destroy(struct Qdisc *sch)
 	struct teql_sched_data *dat = qdisc_priv(sch);
 	struct teql_master *master = dat->m;
 
+	if (!master)
+		return;
+
 	prev = master->slaves;
 	if (prev) {
 		do {
@@ -179,6 +182,11 @@ static int teql_qdisc_init(struct Qdisc *sch, struct nlattr *opt,
 
 	if (m->dev == dev)
 		return -ELOOP;
+
+	if (sch->parent != TC_H_ROOT) {
+		NL_SET_ERR_MSG_MOD(extack, "teql can only be used as root");
+		return -EOPNOTSUPP;
+	}
 
 	q->m = m;
 

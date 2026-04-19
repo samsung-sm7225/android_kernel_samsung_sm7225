@@ -211,8 +211,9 @@ static void kgsl_iommu_remove_global(struct kgsl_mmu *mmu,
 static void kgsl_iommu_add_global(struct kgsl_mmu *mmu,
 		struct kgsl_memdesc *memdesc, const char *name)
 {
-	u32 bit, start = 0;
+	u32 bit;
 	u64 size = kgsl_memdesc_footprint(memdesc);
+	int start = 0;
 
 	if (memdesc->gpuaddr != 0)
 		return;
@@ -1165,7 +1166,7 @@ void _enable_gpuhtw_llc(struct kgsl_mmu *mmu, struct kgsl_iommu_pt *iommu_pt)
 	int ret;
 
 	/* GPU pagetable walk LLC slice not enabled */
-	if (IS_ERR(adreno_dev->gpuhtw_llc_slice))
+	if (IS_ERR_OR_NULL(adreno_dev->gpuhtw_llc_slice))
 		return;
 
 	/* Domain attribute to enable system cache for GPU pagetable walks */
@@ -2611,8 +2612,10 @@ static bool kgsl_iommu_addr_in_range(struct kgsl_pagetable *pagetable,
 		uint64_t gpuaddr, uint64_t size)
 {
 	struct kgsl_iommu_pt *pt = pagetable->priv;
+	u64 end = gpuaddr + size;
 
-	if (gpuaddr == 0)
+	/* Make sure we don't wrap around */
+	if (gpuaddr == 0 || end < gpuaddr)
 		return false;
 
 	if (gpuaddr >= pt->va_start && (gpuaddr + size) < pt->va_end)

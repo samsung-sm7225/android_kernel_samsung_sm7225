@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -1016,7 +1017,10 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 
 		if ((size == 0 || size < prtd->pcm_count) && ((offset + size) < prtd->pcm_count)) {
 			memset(bufptr + offset + size, 0, prtd->pcm_count - size);
-			size = xfer = prtd->pcm_count;
+			if (fbytes > prtd->pcm_count)
+				size = xfer = prtd->pcm_count;
+			else
+				size = xfer = fbytes;
 		}
 
 		if (copy_to_user(buf, bufptr+offset, xfer)) {

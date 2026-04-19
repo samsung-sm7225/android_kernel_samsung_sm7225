@@ -86,8 +86,7 @@ repeat:
 }
 
 int erofs_register_workgroup(struct super_block *sb,
-			     struct erofs_workgroup *grp,
-			     bool tag)
+			     struct erofs_workgroup *grp)
 {
 	struct erofs_sb_info *sbi;
 	int err;
@@ -216,7 +215,7 @@ repeat:
 		first_index = grp->index + 1;
 
 		/* try to shrink each valid workgroup */
-		if (!erofs_try_to_release_workgroup(sbi, grp, cleanup))
+		if (!erofs_try_to_release_workgroup(sbi, grp))
 			continue;
 
 		++freed;

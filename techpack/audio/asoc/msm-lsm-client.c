@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/init.h>
 #include <linux/err.h>
@@ -2167,7 +2168,6 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 			goto done;
 		}
 
-		size = sizeof(p_info_32) + p_info_32.param_size;
 		param_info_rsp = kzalloc(size, GFP_KERNEL);
 
 		if (!param_info_rsp) {

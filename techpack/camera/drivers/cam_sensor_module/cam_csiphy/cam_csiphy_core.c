@@ -527,6 +527,7 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 			"Inval cam_packet strut size: %zu, len_of_buff: %zu",
 			 sizeof(struct cam_packet), len);
 		rc = -EINVAL;
+		cam_mem_put_cpu_buf(cfg_dev->packet_handle);
 		return rc;
 	}
 
@@ -538,18 +539,35 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 		remain_len)) {
 		CAM_ERR(CAM_CSIPHY, "Invalid packet params");
 		rc = -EINVAL;
+		cam_mem_put_cpu_buf(cfg_dev->packet_handle);
 		return rc;
 	}
 
-	cmd_desc = (struct cam_cmd_buf_desc *)
-		((uint32_t *)&csl_packet->payload +
-		csl_packet->cmd_buf_offset / 4);
+	if (csl_packet->num_cmd_buf)
+		cmd_desc = (struct cam_cmd_buf_desc *)
+			((uint32_t *)&csl_packet->payload +
+			csl_packet->cmd_buf_offset / 4);
+	else {
+		CAM_ERR(CAM_CSIPHY, "num_cmd_buffers = %d",
+			csl_packet->num_cmd_buf);
+		rc = -EINVAL;
+		cam_mem_put_cpu_buf(cfg_dev->packet_handle);
+		return rc;
+	}
+
+	rc = cam_packet_util_validate_cmd_desc(cmd_desc);
+	if (rc) {
+		CAM_ERR(CAM_CSIPHY, "Invalid cmd desc ret: %d", rc);
+		cam_mem_put_cpu_buf(cfg_dev->packet_handle);
+		return rc;
+	}
 
 	rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
 		&generic_ptr, &len);
 	if (rc < 0) {
 		CAM_ERR(CAM_CSIPHY,
 			"Failed to get cmd buf Mem address : %d", rc);
+		cam_mem_put_cpu_buf(cfg_dev->packet_handle);
 		return rc;
 	}
 
@@ -558,6 +576,8 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 		CAM_ERR(CAM_CSIPHY,
 			"Not enough buffer provided for cam_cisphy_info");
 		rc = -EINVAL;
+		cam_mem_put_cpu_buf(cmd_desc->mem_handle);
+		cam_mem_put_cpu_buf(cfg_dev->packet_handle);
 		return rc;
 	}
 
@@ -568,6 +588,8 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 	index = cam_csiphy_get_instance_offset(csiphy_dev, cfg_dev->dev_handle);
 	if (index < 0 || index  >= csiphy_dev->session_max_device_support) {
 		CAM_ERR(CAM_CSIPHY, "index is invalid: %d", index);
+		cam_mem_put_cpu_buf(cmd_desc->mem_handle);
+		cam_mem_put_cpu_buf(cfg_dev->packet_handle);
 		return -EINVAL;
 	}
 
@@ -659,6 +681,8 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 		csiphy_dev->csiphy_info[index].data_rate,
 		csiphy_dev->csiphy_info[index].mipi_flags);
 
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
+	cam_mem_put_cpu_buf(cfg_dev->packet_handle);
 	return rc;
 
 reset_settings:
@@ -670,7 +694,8 @@ reset_settings:
 	csiphy_dev->csiphy_info[index].mipi_flags = 0;
 	csiphy_dev->csiphy_info[index].secure_mode = 0;
 	csiphy_dev->csiphy_info[index].hdl_data.device_hdl = -1;
-
+	cam_mem_put_cpu_buf(cfg_dev->packet_handle);
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 	return rc;
 }
 
@@ -1224,6 +1249,12 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		index = csiphy_dev->acquire_count;
 		csiphy_acq_dev.device_handle =
 			cam_create_device_hdl(&bridge_params);
+		if (csiphy_acq_dev.device_handle <= 0) {
+			rc = -EFAULT;
+			CAM_ERR(CAM_CSIPHY, "Can not create device handle");
+			goto release_mutex;
+		}
+
 		csiphy_dev->csiphy_info[index].hdl_data.device_hdl =
 			csiphy_acq_dev.device_handle;
 		csiphy_dev->csiphy_info[index].hdl_data.session_hdl =

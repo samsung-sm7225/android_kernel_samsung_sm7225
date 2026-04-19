@@ -229,7 +229,7 @@ static u32 flow_get_skgid(const struct sk_buff *skb)
 
 static u32 flow_get_vlan_tag(const struct sk_buff *skb)
 {
-	u16 uninitialized_var(tag);
+	u16 tag;
 
 	if (vlan_get_tag(skb, &tag) < 0)
 		return 0;
@@ -407,7 +407,7 @@ static int flow_change(struct net *net, struct sk_buff *in_skb,
 	if (opt == NULL)
 		return -EINVAL;
 
-	err = nla_parse_nested(tb, TCA_FLOW_MAX, opt, flow_policy, NULL);
+	err = nla_parse_nested_deprecated(tb, TCA_FLOW_MAX, opt, flow_policy, NULL);
 	if (err < 0)
 		return err;
 

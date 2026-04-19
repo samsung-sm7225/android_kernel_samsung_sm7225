@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _SDE_EDID_PARSER_H_
@@ -43,6 +44,13 @@ enum extended_data_block_types {
 #else
 #define SDE_EDID_DEBUG(fmt, args...)   SDE_DEBUG(fmt, ##args)
 #endif
+
+/* TODO: Add respective extension fields of HDMI VSDB block.
+ * Fields shall be populated using "sde_edid_extract_hdmi_vsdb_block" function.
+ */
+struct sink_hdmi_vsdb_block {
+	bool supports_ai;
+};
 
 /*
  * struct hdmi_edid_hdr_data - HDR Static Metadata

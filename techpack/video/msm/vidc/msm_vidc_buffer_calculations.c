@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
 #include "msm_vidc_debug.h"
@@ -477,6 +477,10 @@ int msm_vidc_get_num_ref_frames(struct msm_vidc_inst *inst)
 	struct v4l2_ctrl *layer_ctrl;
 	u32 codec;
 
+	codec = get_v4l2_codec(inst);
+	if (codec == V4L2_PIX_FMT_VP8)
+		num_ref = num_ref << 1;
+
 	bframe_ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_B_FRAMES);
 	num_bframes = bframe_ctrl->val;
 	if (num_bframes > 0)
@@ -491,17 +495,16 @@ int msm_vidc_get_num_ref_frames(struct msm_vidc_inst *inst)
 	layer_ctrl = get_ctrl(inst,
 		V4L2_CID_MPEG_VIDC_VIDEO_HEVC_MAX_HIER_CODING_LAYER);
 	num_hp_layers = layer_ctrl->val;
-	codec = get_v4l2_codec(inst);
-	if (num_hp_layers > 0) {
+	if (num_hp_layers > 1) {
 		/* LTR and B - frame not supported with hybrid HP */
 		if (inst->hybrid_hp)
-			num_ref = (num_hp_layers - 1);
+			num_ref = (num_hp_layers + 1) >> 1;
 		else if (codec == V4L2_PIX_FMT_HEVC)
 			num_ref = ((num_hp_layers + 1) / 2) + ltr_count;
-		else if ((codec == V4L2_PIX_FMT_H264) && (num_hp_layers <= 4))
-			num_ref = ((1 << (num_hp_layers - 1)) - 1) + ltr_count;
+		else if ((codec == V4L2_PIX_FMT_H264) && (num_hp_layers < 4))
+			num_ref = (num_hp_layers - 1) + ltr_count;
 		else
-			num_ref = ((num_hp_layers + 1) / 2) + ltr_count;
+			num_ref = num_hp_layers + ltr_count;
 	}
 	return num_ref;
 }
@@ -1044,17 +1047,18 @@ u32 msm_vidc_calculate_enc_output_frame_size(struct msm_vidc_inst *inst)
 	else
 		frame_size = frame_size >> 3;
 
-	if ((inst->rc_type == RATE_CONTROL_OFF) ||
-		(inst->rc_type == V4L2_MPEG_VIDEO_BITRATE_MODE_CQ))
+	if (inst->rc_type == RATE_CONTROL_OFF)
 		frame_size = frame_size << 1;
 
 	if (inst->rc_type == RATE_CONTROL_LOSSLESS)
 		frame_size = (width * height * 9) >> 2;
 
 	/* multiply by 10/8 (1.25) to get size for 10 bit case */
-	if (f->fmt.pix_mp.pixelformat == V4L2_PIX_FMT_HEVC)
+	if (inst->core->platform_data->vpu_ver != VPU_VERSION_AR50_LITE &&
+		f->fmt.pix_mp.pixelformat == V4L2_PIX_FMT_HEVC)
 		frame_size = frame_size + (frame_size >> 2);
 
+calc_done:
 	return ALIGN(frame_size, SZ_4K);
 }
 

@@ -659,6 +659,15 @@ bool icnss_is_fw_ready(void)
 }
 EXPORT_SYMBOL(icnss_is_fw_ready);
 
+unsigned long icnss_get_device_config(void)
+{
+	if (!penv)
+		return 0;
+
+	return penv->device_config;
+}
+EXPORT_SYMBOL(icnss_get_device_config);
+
 void icnss_block_shutdown(bool status)
 {
 	if (!penv)
@@ -4061,6 +4070,8 @@ static int icnss_probe(struct platform_device *pdev)
 	priv->is_chain1_supported = true;
 
 	icnss_allow_recursive_recovery(dev);
+
+	icnss_read_device_configs(priv);
 
 	ret = icnss_resource_parse(priv);
 	if (ret)
