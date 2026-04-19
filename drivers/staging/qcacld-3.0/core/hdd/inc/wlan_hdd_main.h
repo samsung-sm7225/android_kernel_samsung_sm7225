@@ -1148,13 +1148,11 @@ struct hdd_context;
  * @QDISC_FILTER_PRIO_MISMATCH: no filter match with configured priority
  */
 enum qdisc_filter_status {
-   QDISC_FILTER_RTNL_LOCK_FAIL,
-   QDISC_FILTER_PRIO_MATCH,
-   QDISC_FILTER_PRIO_MISMATCH,
+	QDISC_FILTER_RTNL_LOCK_FAIL,
+	QDISC_FILTER_PRIO_MATCH,
+	QDISC_FILTER_PRIO_MISMATCH,
 };
 #endif
-
-
 
 /**
  * struct hdd_adapter - hdd vdev/net_device context
@@ -1176,7 +1174,8 @@ enum qdisc_filter_status {
  * @handle_feature_update: Handle feature update only if it is triggered
  *			   by hdd_netdev_feature_update
  * @netdev_features_update_work: work for handling the netdev features update
-				 for the adapter. 
+				 for the adapter.
+ * @gro_disallowed: Flag to check if GRO is enabled or disable for adapter
  * @gro_flushed: Flag to indicate if GRO explicit flush is done or not
  * @delete_in_progress: Flag to indicate that the adapter delete is in
  *			progress, and any operation using rtnl lock inside
@@ -1481,7 +1480,7 @@ struct hdd_adapter {
 	bool handle_feature_update;
 
 	qdf_work_t netdev_features_update_work;
-    qdf_atomic_t gro_disallowed;
+	qdf_atomic_t gro_disallowed;
 	uint8_t gro_flushed[DP_MAX_RX_THREADS];
 	bool delete_in_progress;
 	qdf_atomic_t net_dev_hold_ref_count[NET_DEV_HOLD_ID_MAX];
@@ -1671,7 +1670,7 @@ enum hdd_sta_smps_param {
 enum RX_OFFLOAD {
 	CFG_LRO_ENABLED = 1,
 	CFG_GRO_ENABLED,
-    CFG_DYNAMIC_GRO_ENABLED,
+	CFG_DYNAMIC_GRO_ENABLED,
 };
 
 /* One per STA: 1 for BCMC_STA_ID, 1 for each SAP_SELF_STA_ID,
@@ -1878,7 +1877,6 @@ struct hdd_context {
 	/** P2P Device MAC Address for the adapter  */
 	struct qdf_mac_addr p2p_device_address;
 
-	qdf_wake_lock_t rx_wake_lock;
 	qdf_wake_lock_t sap_wake_lock;
 
 	/* Flag keeps track of wiphy suspend/resume */
@@ -2130,8 +2128,8 @@ struct hdd_context {
 	struct {
 		qdf_atomic_t rx_aggregation;
 		uint8_t gro_force_flush[DP_MAX_RX_THREADS];
-        bool tc_based_dyn_gro;
-        uint32_t tc_ingress_prio;
+		bool tc_based_dyn_gro;
+		uint32_t tc_ingress_prio;
 	} dp_agg_param;
 #ifdef FW_THERMAL_THROTTLE_SUPPORT
 	uint8_t dutycycle_off_percent;
@@ -2140,10 +2138,6 @@ struct hdd_context {
 	qdf_workqueue_t *adapter_ops_wq;
 	struct hdd_adapter_ops_history adapter_ops_history;
 	bool is_dual_mac_cfg_updated;
-#ifdef SEC_CONFIG_WLAN_BEACON_CHECK      
-    qdf_mc_timer_t skip_bmiss_set_timer; 
-    bool bmiss_set_last;                 
-#endif /* SEC_CONFIG_WLAN_BEACON_CHECK */
 };
 
 /**
@@ -2217,9 +2211,7 @@ struct hdd_channel_info {
 /*
  * Function declarations and documentation
  */
-#ifdef SEC_CONFIG_PSM_SYSFS
-int wlan_hdd_sec_get_psm(void);
-#endif /* SEC_CONFIG_PSM_SYSFS */
+
 /**
  * wlan_hdd_history_get_next_index() - get next index to store the history
 				       entry

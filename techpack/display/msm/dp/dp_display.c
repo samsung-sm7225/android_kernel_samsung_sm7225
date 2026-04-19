@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1598,6 +1599,11 @@ static void dp_display_send_hpd_event(struct dp_display_private *dp)
 	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE,
 			envp);
 
+	if (dev->mode_config.funcs->output_poll_changed)
+		dev->mode_config.funcs->output_poll_changed(dev);
+
+	drm_client_dev_hotplug(dev);
+
 	if (connector->status == connector_status_connected) {
 		dp_display_state_add(DP_STATE_CONNECT_NOTIFIED);
 		dp_display_state_remove(DP_STATE_DISCONNECT_NOTIFIED);
@@ -1913,6 +1919,8 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 
 	dp->dp_display.max_pclk_khz = min(dp->parser->max_pclk_khz,
 					dp->debug->max_pclk_khz);
+	dp->dp_display.max_hdisplay = dp->parser->max_hdisplay;
+	dp->dp_display.max_vdisplay = dp->parser->max_vdisplay;
 
 	/*
 	 * If dp video session is not restored from a previous session teardown
@@ -4559,464 +4567,151 @@ end:
 	return 0;
 }
 
-#ifdef CONFIG_SEC_DISPLAYPORT
-void secdp_timing_init(void)
+static int dp_display_validate_resources(
+		struct dp_display *dp_display,
+		void *panel, struct drm_display_mode *mode,
+		const struct msm_resource_caps_info *avail_res)
 {
-	struct dp_display_private *dp = g_secdp_priv;
-	struct secdp_misc *sec = &dp->sec;
-	struct secdp_prefer *prefer = &sec->prefer;
-	struct secdp_dex *dex = &sec->dex;
+	struct dp_display_private *dp;
+	struct dp_panel *dp_panel;
+	struct dp_debug *debug;
+	struct dp_display_mode dp_mode;
+	u32 mode_rate_khz, supported_rate_khz, mode_bpp, num_lm;
+	int rc, tmds_max_clock, rate;
+	bool dsc_en;
 
-	secdp_update_max_timing(&sec->prf_timing, NULL);
-	secdp_update_max_timing(&sec->mrr_timing, NULL);
-	secdp_update_max_timing(&sec->dex_timing, NULL);
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+	dp_panel = panel;
+	debug = dp->debug;
 
-	prefer->ratio    = MON_RATIO_NA;
-	prefer->exist    = false;
-	prefer->hdisp    = 0;
-	prefer->vdisp    = 0;
-	prefer->refresh  = 0;
+	dp_display->convert_to_dp_mode(dp_display, panel, mode, &dp_mode);
 
-	dex->ignore_prefer_ratio = false;
-}
+	dsc_en = dp_mode.timing.comp_info.comp_ratio ? true : false;
+	mode_bpp = dsc_en ? dp_mode.timing.comp_info.dsc_info.bpp :
+			dp_mode.timing.bpp;
 
-/**
- * check if reconnection is needed when mode is changing between mirror and dex
- * @return false    if dex and mirror resolutions are same
- * @return true     otherwise
- */
-bool secdp_check_reconnect(void)
-{
-	struct dp_display_private *dp = g_secdp_priv;
-	struct secdp_misc *sec = &dp->sec;
-	struct secdp_display_timing *dex_timing, *compare;
-	bool ret = false;
+	mode_rate_khz = mode->clock * mode_bpp;
+	rate = drm_dp_bw_code_to_link_rate(dp->link->link_params.bw_code);
+	supported_rate_khz = dp->link->link_params.lane_count * rate * 8;
+	tmds_max_clock = dp_panel->connector->display_info.max_tmds_clock;
 
-	if (sec->hmd.exist)
-		goto end;
-
-	secdp_show_max_timing(dp);
-
-	dex_timing = &sec->dex_timing;
-
-	if (sec->prefer.exist)
-		compare = &sec->prf_timing;
-	else
-		compare = &sec->mrr_timing;
-
-	if (compare->active_h == dex_timing->active_h &&
-			compare->active_v == dex_timing->active_v &&
-			compare->refresh_rate == dex_timing->refresh_rate)
-		goto end;
-
-	ret = true;
-end:
-	return ret;
-}
-
-/**
- * do reconnect when mode is changing from dex to mirror and vice versa.
- * it's needed only when resolution changing is required between mirror and dex.
- */
-void secdp_reconnect(void)
-{
-	struct dp_display_private *dp = g_secdp_priv;
-
-	secdp_logger_set_max_count(300);
-
-	if (dp->link->poor_connection) {
-		DP_INFO("poor connection, return!\n");
-		return;
+	if (mode_rate_khz > supported_rate_khz) {
+		DP_DEBUG("pclk:%d, supported_rate:%d\n",
+				mode->clock, supported_rate_khz);
+		return -EINVAL;
 	}
 
-	mutex_lock(&dp->sec.attention_lock);
-	DP_INFO("dex_reconnect hpd low++\n");
-
-	dp->sec.dex.reconnecting = true;
-	dp->sec.dex.status = DEX_DURING_MODE_CHANGE;
-
-	if (dp->sec.dex.curr == DEX_ENABLED)
-		dp->sec.dex.curr = DEX_DURING_MODE_CHANGE;
-
-	dp->hpd->hpd_high = false;
-	dp_display_host_init(dp);
-	dp_display_process_hpd_low(dp);
-
-	DP_INFO("dex_reconnect hpd low--\n");
-	mutex_unlock(&dp->sec.attention_lock);
-
-	/* give some time for display hal to handle disconnect event */
-	msleep(400);
-
-	mutex_lock(&dp->sec.attention_lock);
-	if (!dp_display_state_is(DP_STATE_ENABLED) &&
-			dp->sec.dex.reconnecting &&
-			!dp_display_state_is(DP_STATE_CONNECTED)) {
-		DP_INFO("dex_reconnect hpd high++\n");
-
-		if (dp_display_state_is(DP_STATE_INITIALIZED)) {
-			/* aux timeout happens whenever DeX reconnect scenario,
-			 * init aux here
-			 */
-			dp_display_host_unready(dp);
-			dp_display_host_deinit(dp);
-			usleep_range(5000, 6000);
-		}
-
-		dp->hpd->hpd_high = true;
-		dp_display_host_init(dp);
-		dp_display_process_hpd_high(dp);
-
-		DP_INFO("dex_reconnect hpd high--\n");
-	}
-	dp->sec.dex.reconnecting = false;
-	mutex_unlock(&dp->sec.attention_lock);
-}
-
-/**
- * check if given mode(timing) is fail-safe or not
- */
-static bool secdp_check_fail_safe(struct drm_display_mode *mode)
-{
-	bool ret = false;
-
-	if (mode->hdisplay == 640 && mode->vdisplay == 480)
-		ret = true;
-
-	return ret;
-}
-
-/**
- * check if given ratio is one of dex ratios (16:9, 16:10, 21:9)
- */
-static bool secdp_check_dex_ratio(enum mon_aspect_ratio_t ratio)
-{
-	bool ret = false;
-
-	switch (ratio) {
-	case MON_RATIO_16_9:
-	case MON_RATIO_16_10:
-	case MON_RATIO_21_9:
-		ret = true;
-		break;
-	default:
-		break;
+	if (mode->clock > dp_display->max_pclk_khz) {
+		DP_DEBUG("clk:%d, max:%d\n", mode->clock,
+				dp_display->max_pclk_khz);
+		return -EINVAL;
 	}
 
-	return ret;
-}
-
-/**
- * check if mode's active_h, active_v are within max dex rows/cols
- */
-static bool secdp_check_dex_rowcol(struct drm_display_mode *mode)
-{
-	int max_cols = DEX_DFT_COL, max_rows = DEX_DFT_ROW;
-	bool ret = false;
-
-	if (secdp_get_dex_res() == DEX_RES_3440X1440) {
-		max_cols = DEX_MAX_COL;
-		max_rows = DEX_MAX_ROW;
+	if ((dp_display->max_hdisplay > 0) && (dp_display->max_vdisplay > 0) &&
+			((mode->hdisplay > dp_display->max_hdisplay) ||
+			(mode->vdisplay > dp_display->max_vdisplay))) {
+		DP_DEBUG("hdisplay:%d, max-hdisplay:%d",
+			mode->hdisplay, dp_display->max_hdisplay);
+		DP_DEBUG("vdisplay:%d, max-vdisplay:%d\n",
+			mode->vdisplay, dp_display->max_vdisplay);
+		return -EINVAL;
 	}
 
-	if ((mode->hdisplay <= max_cols) && (mode->vdisplay <= max_rows))
-		ret = true;
-
-	return ret;
-}
-
-/**
- * check if mode's refresh_rate is within dex refresh range
- */
-static bool secdp_check_dex_refresh(struct drm_display_mode *mode)
-{
-	int mode_refresh = drm_mode_vrefresh(mode);
-	bool ret = false;
-
-	if (mode_refresh >= DEX_FPS_MIN && mode_refresh <= DEX_FPS_MAX)
-		ret = true;
-
-	return ret;
-}
-
-static bool secdp_exceed_mst_max_pclk(struct drm_display_mode *mode)
-{
-	bool ret = false;
-
-	if (secdp_is_mst_receiver() == SECDP_ADT_SST) {
-		/* it's SST. No need to check pclk */
-		goto end;
+	if (tmds_max_clock > 0 && mode->clock > tmds_max_clock) {
+		DP_DEBUG("clk:%d, max tmds:%d\n", mode->clock,
+				tmds_max_clock);
+		return -EINVAL;
 	}
 
-	if (mode->clock <= MST_MAX_PCLK) {
-		/* it's MST, and current pclk is less than MST's max pclk */
-		goto end;
+	rc = msm_get_mixer_count(dp->priv, mode, avail_res, &num_lm);
+	if (rc) {
+		DP_ERR("error getting mixer count. rc:%d\n", rc);
+		return -EINVAL;
 	}
 
-	/* it's MST, and current pclk is bigger than MST's max pclk */
-	ret = true;
-end:
-	return ret;
+	if (num_lm > avail_res->num_lm ||
+			(num_lm == 2 && !avail_res->num_3dmux)) {
+		DP_DEBUG("num_lm:%d, req lm:%d 3dmux:%d\n", num_lm,
+				avail_res->num_lm, avail_res->num_3dmux);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
-static bool secdp_check_prefer_resolution(struct dp_display_private *dp,
-				struct drm_display_mode *mode)
+static int dp_display_check_overrides(
+		struct dp_display *dp_display,
+		void *panel, struct drm_display_mode *mode,
+		const struct msm_resource_caps_info *avail_res)
 {
-	struct secdp_misc *sec;
-	bool ret = false;
+	struct dp_mst_connector *mst_connector;
+	struct dp_display_private *dp;
+	struct dp_panel *dp_panel;
+	struct dp_debug *debug;
+	bool in_list = false;
+	int hdis, vdis, vref, ar, _hdis, _vdis, _vref, _ar;
 
-	if (!dp || !mode)
-		goto end;
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+	dp_panel = panel;
+	debug = dp->debug;
 
-	sec = &dp->sec;
-	if (!sec || sec->debug.prefer_check_skip)
-		goto end;
+	/*
+	 * If the connector exists in the mst connector list and if debug is
+	 * enabled for that connector, use the mst connector settings from the
+	 * list for validation. Otherwise, use non-mst default settings.
+	 */
+	mutex_lock(&debug->dp_mst_connector_list.lock);
 
-	if (mode->type & DRM_MODE_TYPE_PREFERRED)
-		ret = true;
-
-end:
-	return ret;
-}
-
-static bool secdp_has_higher_refresh(struct dp_display_private *dp,
-				struct drm_display_mode *mode,
-				int mode_refresh)
-{
-	struct secdp_prefer *prefer = &dp->sec.prefer;
-	bool ret = false;
-
-	if (secdp_check_prefer_resolution(dp, mode))
-		goto end;
-
-	if (mode->hdisplay == prefer->hdisp &&
-			mode->vdisplay == prefer->vdisp &&
-			mode_refresh > prefer->refresh)
-		ret = true;
-end:
-	return ret;
-}
-
-/**
- * check if current timing(mode) is valid compared to prefer timing
- * return true if it's valid. false otherwise
- */
-static bool secdp_check_hdisp_vdisp(struct dp_display_private *dp,
-		struct drm_display_mode *mode)
-{
-	struct secdp_prefer *prefer = &dp->sec.prefer;
-	bool ret = true;
-
-	if (secdp_check_prefer_resolution(dp, mode))
-		goto end;
-
-	if (prefer->hdisp > prefer->vdisp) {
-		if (mode->hdisplay < mode->vdisplay)
-			ret = false;
-
-		goto end;
+	if (list_empty(&debug->dp_mst_connector_list.list)) {
+		DP_MST_DEBUG("MST connect list is empty\n");
+		mutex_unlock(&debug->dp_mst_connector_list.lock);
+		goto verify_default;
 	}
 
-	if (prefer->hdisp < prefer->vdisp) {
-		if (mode->hdisplay > mode->vdisplay)
-			ret = false;
-	}
-end:
-	if (!ret) {
-		DP_INFO("weird timing! %dx%d@%dhz\n",
-			mode->hdisplay, mode->vdisplay, mode->vrefresh);
-	}
-	return ret;
-}
+	list_for_each_entry(mst_connector, &debug->dp_mst_connector_list.list,
+			list) {
+		if (mst_connector->con_id == dp_panel->connector->base.id) {
+			in_list = true;
 
-#define __NA	(-1)	/* not available */
+			if (!mst_connector->debug_en) {
+				mutex_unlock(
+				&debug->dp_mst_connector_list.lock);
+				return 0;
+			}
 
-static struct secdp_display_timing secdp_dex_resolution[] = {
-	{1600,  900, __NA, false, __NA, DEX_RES_1600X900,  MON_RATIO_16_9},
-	{1920, 1080, __NA, false, __NA, DEX_RES_1920X1080, MON_RATIO_16_9},
-	{1920, 1200, __NA, false, __NA, DEX_RES_1920X1200, MON_RATIO_16_10},
-	{2560, 1080, __NA, false, __NA, DEX_RES_2560X1080, MON_RATIO_21_9},
-	{2560, 1440, __NA, false, __NA, DEX_RES_2560X1440, MON_RATIO_16_9},
-	{2560, 1600, __NA, false, __NA, DEX_RES_2560X1600, MON_RATIO_16_10},
-	{3440, 1440, __NA, false, __NA, DEX_RES_3440X1440, MON_RATIO_21_9},
-};
+			hdis = mst_connector->hdisplay;
+			vdis = mst_connector->vdisplay;
+			vref = mst_connector->vrefresh;
+			ar = mst_connector->aspect_ratio;
 
-#define DEX_FAIL_SAFE		2073600	/* 1920x1080 */
+			_hdis = mode->hdisplay;
+			_vdis = mode->vdisplay;
+			_vref = mode->vrefresh;
+			_ar = mode->picture_aspect_ratio;
 
-static bool secdp_dex_fail_safe(struct drm_display_mode *mode)
-{
-	if ((mode->hdisplay * mode->vdisplay) < DEX_FAIL_SAFE)
-		return true;
-
-	return false;
-}
-
-static bool secdp_check_dex_resolution(struct dp_display_private *dp,
-				struct drm_display_mode *mode, bool *fail_safe)
-{
-	struct secdp_display_timing *dex_table = secdp_dex_resolution;
-	struct secdp_misc *sec = &dp->sec;
-	struct secdp_prefer *prefer = &sec->prefer;
-	struct secdp_dex *dex = &sec->dex;
-	enum mon_aspect_ratio_t mode_ratio = secdp_get_aspect_ratio(mode);
-	u64 i;
-	bool mode_interlaced = !!(mode->flags & DRM_MODE_FLAG_INTERLACE);
-	bool prefer_support = dp->parser->prefer_support;
-	bool prefer_mode = secdp_check_prefer_resolution(dp, mode);
-	bool ret = false;
-
-	if (dex->ignore_prefer_ratio && secdp_dex_fail_safe(mode)) {
-		*fail_safe = ret = true;
-		goto end;
-	}
-
-	if (!secdp_check_dex_refresh(mode))
-		goto end;
-
-	if (prefer_support && prefer_mode &&
-			secdp_check_dex_rowcol(mode) &&
-			secdp_check_dex_ratio(mode_ratio)) {
-		ret = true;
-		goto end;
-	}
-
-	for (i = 0; i < ARRAY_SIZE(secdp_dex_resolution); i++) {
-		if ((mode_interlaced != dex_table[i].interlaced) ||
-				(mode->hdisplay != dex_table[i].active_h) ||
-				(mode->vdisplay != dex_table[i].active_v))
-			continue;
-
-		if (!dex->ignore_prefer_ratio && dex_table[i].mon_ratio != prefer->ratio)
-			continue;
-
-		if (dex_table[i].dex_res <= secdp_get_dex_res()) {
-			ret = true;
+			if (hdis == _hdis && vdis == _vdis && vref == _vref &&
+					ar == _ar) {
+				mutex_unlock(
+				&debug->dp_mst_connector_list.lock);
+				return 0;
+			}
 			break;
 		}
 	}
-end:
-	return ret;
+
+	mutex_unlock(&debug->dp_mst_connector_list.lock);
+	if (in_list)
+		return -EINVAL;
+
+verify_default:
+	if (debug->debug_en && (mode->hdisplay != debug->hdisplay ||
+			mode->vdisplay != debug->vdisplay ||
+			mode->vrefresh != debug->vrefresh ||
+			mode->picture_aspect_ratio != debug->aspect_ratio))
+		return -EINVAL;
+
+	return 0;
 }
-
-#if defined(REMOVE_YUV420_AT_PREFER)
-static bool secdp_prefer_remove_yuv420(struct dp_display_private *dp,
-				struct drm_display_mode *mode)
-{
-	struct drm_connector *connector = dp->dp_display.base_connector;
-	u8 vic;
-	bool result = false;
-
-	if (!secdp_check_prefer_resolution(dp, mode))
-		goto exit;
-
-	if (!drm_mode_is_420_only(&connector->display_info, mode))
-		goto exit;
-
-	vic = drm_match_cea_mode(mode);
-
-	/* HACK: prevent preferred from becomming ycbcr420 */
-	bitmap_clear(connector->display_info.hdmi.y420_vdb_modes, vic, 1);
-	DP_INFO("unset ycbcr420 of vic %d\n", vic);
-	result = true;
-exit:
-	return result;
-}
-#endif
-
-static bool secdp_check_resolution(struct dp_display_private *dp,
-				struct drm_display_mode *mode,
-				bool supported)
-{
-	struct secdp_misc *sec = &dp->sec;
-	struct secdp_prefer *prefer = &sec->prefer;
-	struct secdp_dex *dex = &sec->dex;
-	struct secdp_display_timing *prf_timing, *mrr_timing, *dex_timing;
-	bool prefer_support = dp->parser->prefer_support;
-	bool prefer_mode, ret = false, dex_supported = false;
-	bool dex_fail_safe = false, ratio_check = false;
-	int mode_refresh = drm_mode_vrefresh(mode);
-
-	prf_timing = &sec->prf_timing;
-	mrr_timing = &sec->mrr_timing;
-	dex_timing = &sec->dex_timing;
-
-	prefer_mode = secdp_check_prefer_resolution(dp, mode);
-	if (prefer_mode) {
-		secdp_show_max_timing(dp);
-
-		if ((mrr_timing->clock || prf_timing->clock) && !dex_timing->clock) {
-			dex->ignore_prefer_ratio = true;
-			DP_INFO("[dex] ignore prefer ratio\n");
-		}
-
-		prefer->hdisp = mode->hdisplay;
-		prefer->vdisp = mode->vdisplay;
-		prefer->refresh = mode_refresh;
-		prefer->ratio = secdp_get_aspect_ratio(mode);
-		DP_INFO("prefer timing found! %dx%d@%dhz, %s\n",
-			prefer->hdisp, prefer->vdisp, prefer->refresh,
-			secdp_aspect_ratio_to_string(prefer->ratio));
-
-#if defined(REMOVE_YUV420_AT_PREFER)
-		secdp_prefer_remove_yuv420(dp, mode);
-#endif
-
-		if (!prefer_support) {
-			DP_INFO("remove prefer!\n");
-			mode->type &= (~DRM_MODE_TYPE_PREFERRED);
-		}
-	}
-
-	if (prefer->ratio == MON_RATIO_NA) {
-		dex->ignore_prefer_ratio = true;
-		DP_INFO("prefer timing is absent, ignore!\n");
-	}
-
-	if (!supported || secdp_exceed_mst_max_pclk(mode)
-			|| mode->vrefresh < MIRROR_REFRESH_MIN) {
-		ret = false;
-		goto end;
-	}
-
-	ratio_check = secdp_check_hdisp_vdisp(dp, mode);
-
-	if (prefer_mode) {
-		prefer->exist = true;
-		secdp_update_max_timing(prf_timing, mode);
-	} else if (prefer->refresh > 0 &&
-			secdp_has_higher_refresh(dp, mode, mode_refresh)) {
-		/* found same h/v display but higher refresh
-		 * rate than preferred timing
-		 */
-		secdp_update_max_timing(prf_timing, mode);
-		mode->type |= DRM_MODE_TYPE_PREFERRED;
-	} else {
-		if (ratio_check)
-			secdp_update_max_timing(mrr_timing, mode);
-	}
-
-	if (sec->hmd.exist) {
-		/* skip dex resolution check as HMD doesn't have DeX */
-		ret = true;
-		goto end;
-	}
-
-	dex_supported = secdp_check_dex_resolution(dp, mode, &dex_fail_safe);
-	if (dex_supported && !dex_fail_safe)
-		secdp_update_max_timing(dex_timing, mode);
-
-	if (!secdp_check_dex_mode())
-		ret = ratio_check ? supported : false;
-	else
-		ret = dex_supported;
-
-	if (!ret && secdp_check_fail_safe(mode))
-		ret = true;
-
-end:
-	return ret;
-}
-#endif/*CONFIG_SEC_DISPLAYPORT*/
 
 static enum drm_mode_status dp_display_validate_mode(
 		struct dp_display *dp_display,
@@ -5024,17 +4719,10 @@ static enum drm_mode_status dp_display_validate_mode(
 		const struct msm_resource_caps_info *avail_res)
 {
 	struct dp_display_private *dp;
-	u32 mode_rate_khz = 0, supported_rate_khz = 0, mode_bpp = 0;
+
 	struct dp_panel *dp_panel;
 	struct dp_debug *debug;
 	enum drm_mode_status mode_status = MODE_BAD;
-	bool in_list = false;
-	struct dp_mst_connector *mst_connector;
-	int hdis, vdis, vref, ar, _hdis, _vdis, _vref, _ar, rate;
-	struct dp_display_mode dp_mode;
-	bool dsc_en;
-	u32 num_lm = 0;
-	int rc = 0, tmds_max_clock = 0;
 
 	if (!dp_display || !mode || !panel ||
 			!avail_res || !avail_res->max_mixer_width) {
@@ -5053,112 +4741,26 @@ static enum drm_mode_status dp_display_validate_mode(
 	}
 
 	debug = dp->debug;
-	if (!debug)
-		goto end;
-
-	dp_display->convert_to_dp_mode(dp_display, panel, mode, &dp_mode);
-
-	dsc_en = dp_mode.timing.comp_info.comp_ratio ? true : false;
-	mode_bpp = dsc_en ? dp_mode.timing.comp_info.dsc_info.bpp :
-			dp_mode.timing.bpp;
-
-	mode_rate_khz = mode->clock * mode_bpp;
-	rate = drm_dp_bw_code_to_link_rate(dp->link->link_params.bw_code);
-	supported_rate_khz = dp->link->link_params.lane_count * rate * 8;
-	tmds_max_clock = dp_panel->connector->display_info.max_tmds_clock;
-
-	if (mode_rate_khz > supported_rate_khz) {
-		DP_MST_DEBUG("pclk:%d, supported_rate:%d\n",
-				mode_rate_khz, supported_rate_khz);
+	if (!debug) {
+		DP_ERR("invalid debug node\n");
 		goto end;
 	}
 
-	if (mode->clock > dp_display->max_pclk_khz) {
-		DP_MST_DEBUG("clk:%d, max:%d\n", mode->clock,
-				dp_display->max_pclk_khz);
+	if (dp_display_validate_resources(dp_display, panel, mode, avail_res)) {
+		DP_DEBUG("DP bad mode %dx%d@%d\n",
+			mode->hdisplay, mode->vdisplay, mode->clock);
 		goto end;
 	}
 
-#ifdef CONFIG_SEC_DISPLAYPORT
-	if (secdp_is_mst_receiver() == SECDP_ADT_MST)
-#endif
-	if (tmds_max_clock > 0 && mode->clock > tmds_max_clock) {
-		DP_MST_DEBUG("clk:%d, max tmds:%d\n", mode->clock,
-				tmds_max_clock);
+	if (dp_display_check_overrides(dp_display, panel,
+				mode, avail_res)) {
+		DP_MST_DEBUG("DP overrides ignore mode %dx%d@%d\n",
+			mode->hdisplay, mode->vdisplay, mode->clock);
 		goto end;
 	}
 
-	rc = msm_get_mixer_count(dp->priv, mode, avail_res, &num_lm);
-	if (rc) {
-		DP_ERR("error getting mixer count. rc:%d\n", rc);
-		goto end;
-	}
-
-	if (num_lm > avail_res->num_lm ||
-			(num_lm == 2 && !avail_res->num_3dmux)) {
-		DP_MST_DEBUG("num_lm:%d, req lm:%d 3dmux:%d\n", num_lm,
-				avail_res->num_lm, avail_res->num_3dmux);
-		goto end;
-	}
-
-	/*
-	 * If the connector exists in the mst connector list and if debug is
-	 * enabled for that connector, use the mst connector settings from the
-	 * list for validation. Otherwise, use non-mst default settings.
-	 */
-	mutex_lock(&debug->dp_mst_connector_list.lock);
-
-	if (list_empty(&debug->dp_mst_connector_list.list)) {
-		mutex_unlock(&debug->dp_mst_connector_list.lock);
-		goto verify_default;
-	}
-
-	list_for_each_entry(mst_connector, &debug->dp_mst_connector_list.list,
-			list) {
-		if (mst_connector->con_id == dp_panel->connector->base.id) {
-			in_list = true;
-
-			if (!mst_connector->debug_en) {
-				mode_status = MODE_OK;
-				mutex_unlock(
-				&debug->dp_mst_connector_list.lock);
-				goto end;
-			}
-
-			hdis = mst_connector->hdisplay;
-			vdis = mst_connector->vdisplay;
-			vref = mst_connector->vrefresh;
-			ar = mst_connector->aspect_ratio;
-
-			_hdis = mode->hdisplay;
-			_vdis = mode->vdisplay;
-			_vref = mode->vrefresh;
-			_ar = mode->picture_aspect_ratio;
-
-			if (hdis == _hdis && vdis == _vdis && vref == _vref &&
-					ar == _ar) {
-				mode_status = MODE_OK;
-				mutex_unlock(
-				&debug->dp_mst_connector_list.lock);
-				goto end;
-			}
-
-			break;
-		}
-	}
-
-	mutex_unlock(&debug->dp_mst_connector_list.lock);
-
-	if (in_list)
-		goto end;
-
-verify_default:
-	if (debug->debug_en && (mode->hdisplay != debug->hdisplay ||
-			mode->vdisplay != debug->vdisplay ||
-			mode->vrefresh != debug->vrefresh ||
-			mode->picture_aspect_ratio != debug->aspect_ratio))
-		goto end;
-
+	DP_DEBUG("DP ok mode %dx%d@%d\n",
+			mode->hdisplay, mode->vdisplay, mode->clock);
 	mode_status = MODE_OK;
 end:
 #ifdef CONFIG_SEC_DISPLAYPORT
@@ -5286,6 +4888,27 @@ static int dp_display_config_hdr(struct dp_display *dp_display, void *panel,
 		core_clk_rate, flush_hdr);
 }
 
+static int dp_display_get_display_type(struct dp_display *dp_display,
+		const char **display_type)
+{
+	struct dp_display_private *dp;
+
+	if (!dp_display || !display_type) {
+		pr_err("invalid input\n");
+		return -EINVAL;
+	}
+
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+
+	*display_type = dp->parser->display_type;
+
+	if (!strcmp(*display_type, "primary"))
+		dp_display->is_primary = true;
+
+	return 0;
+}
+
+
 static int dp_display_setup_colospace(struct dp_display *dp_display,
 		void *panel,
 		u32 colorspace)
@@ -5352,6 +4975,11 @@ static int dp_display_init_aux_switch(struct dp_display_private *dp)
 	if (!dp->aux_switch_node) {
 		DP_WARN("cannot parse %s handle\n", phandle);
 		rc = -ENODEV;
+		goto end;
+	}
+
+	if (strcmp(dp->aux_switch_node->name, "fsa4480")) {
+		DP_DEBUG("Not an fsa4480 aux switch\n");
 		goto end;
 	}
 
@@ -5844,6 +5472,7 @@ static int dp_display_probe(struct platform_device *pdev)
 	g_dp_display->post_open     = NULL;
 	g_dp_display->post_init     = dp_display_post_init;
 	g_dp_display->config_hdr    = dp_display_config_hdr;
+	g_dp_display->get_display_type = dp_display_get_display_type;
 	g_dp_display->mst_install   = dp_display_mst_install;
 	g_dp_display->mst_uninstall = dp_display_mst_uninstall;
 	g_dp_display->mst_connector_install = dp_display_mst_connector_install;

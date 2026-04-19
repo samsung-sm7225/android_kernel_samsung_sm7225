@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
+dtstree		:= $(srctree)/$(src)
+
+vendor := $(dtstree)/vendor
+ifeq "$(wildcard $(vendor)/Makefile)" ""
 subdir-y += actions
 subdir-y += al
 subdir-y += allwinner
@@ -30,12 +34,9 @@ subdir-y += xilinx
 subdir-y += zte
 
 
-dtstree		:= $(srctree)/$(src)
-
-#vendor := $(dtstree)/vendor
-#ifneq "$(wildcard $(vendor)/Makefile)" ""
-#        subdir-y += vendor
-#endif
+else
+        subdir-y += vendor
+endif
 
 dtb-$(CONFIG_OF_ALL_DTBS) := $(patsubst $(dtstree)/%.dts,%.dtb, $(foreach d,$(subdir), $(wildcard $(dtstree)/$(d)/*.dts)))
 

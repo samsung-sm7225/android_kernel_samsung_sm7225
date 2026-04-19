@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* 
  * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "CAM-REQ-MGR_UTIL %s:%d " fmt, __func__, __LINE__
@@ -14,6 +15,7 @@
 #include <media/cam_req_mgr.h>
 #include "cam_req_mgr_util.h"
 #include "cam_debug_util.h"
+#include "cam_subdev.h"
 
 static struct cam_req_mgr_util_hdl_tbl *hdl_tbl;
 static DEFINE_SPINLOCK(hdl_tbl_lock);
@@ -35,7 +37,6 @@ int cam_req_mgr_util_init(void)
 		rc = -ENOMEM;
 		goto hdl_tbl_alloc_failed;
 	}
-	
 	bitmap_size = BITS_TO_LONGS(CAM_REQ_MGR_MAX_HANDLES_V2) * sizeof(long);
 	hdl_tbl_local->bitmap = kzalloc(bitmap_size, GFP_KERNEL);
 	if (!hdl_tbl_local->bitmap) {
@@ -55,7 +56,6 @@ int cam_req_mgr_util_init(void)
 	hdl_tbl = hdl_tbl_local;
 	spin_unlock_bh(&hdl_tbl_lock);
 
-	
 	return rc;
 
 bitmap_alloc_fail:
@@ -139,6 +139,19 @@ static int32_t cam_get_free_handle_index(void)
 	return idx;
 }
 
+static void cam_dump_tbl_info(void)
+{
+	int i;
+
+	for (i = 0; i < CAM_REQ_MGR_MAX_HANDLES_V2; i++)
+		CAM_INFO_RATE_LIMIT_CUSTOM(CAM_CRM,
+			CAM_RATE_LIMIT_INTERVAL_5SEC,
+			CAM_REQ_MGR_MAX_HANDLES_V2,
+			"session_hdl=%x hdl_value=%x type=%d state=%d",
+			hdl_tbl->hdl[i].session_hdl, hdl_tbl->hdl[i].hdl_value,
+			hdl_tbl->hdl[i].type, hdl_tbl->hdl[i].state);
+}
+
 int32_t cam_create_session_hdl(void *priv)
 {
 	int idx;
@@ -157,7 +170,6 @@ int32_t cam_create_session_hdl(void *priv)
 		CAM_ERR(CAM_CRM, "Unable to create session handle(idx = %d)",
 			idx);
 		cam_dump_tbl_info();
-
 		spin_unlock_bh(&hdl_tbl_lock);
 		return idx;
 	}
@@ -180,6 +192,14 @@ int32_t cam_create_device_hdl(struct cam_create_dev_hdl *hdl_data)
 	int idx;
 	int rand = 0;
 	int32_t handle;
+	bool crm_active;
+
+	crm_active = cam_req_mgr_is_open();
+	if (!crm_active) {
+		CAM_ERR(CAM_ICP, "CRM is not ACTIVE");
+		spin_unlock_bh(&hdl_tbl_lock);
+		return -EINVAL;
+	}
 
 	spin_lock_bh(&hdl_tbl_lock);
 	if (!hdl_tbl) {
@@ -240,7 +260,6 @@ int32_t cam_create_link_hdl(struct cam_create_dev_hdl *hdl_data)
 	hdl_tbl->hdl[idx].state = HDL_ACTIVE;
 	hdl_tbl->hdl[idx].priv = hdl_data->priv;
 	hdl_tbl->hdl[idx].ops = NULL;
-	hdl_tbl->hdl[idx].dev_id = hdl_data->dev_id;
 	spin_unlock_bh(&hdl_tbl_lock);
 
 	CAM_DBG(CAM_CRM, "handle = %x", handle);
@@ -273,7 +292,7 @@ void *cam_get_priv(int32_t dev_hdl, int handle_type)
 
 	type = CAM_REQ_MGR_GET_HDL_TYPE(dev_hdl);
 	if (type != handle_type) {
-		CAM_ERR_RATE_LIMIT(CAM_CRM, "Invalid type: %d", type);
+		CAM_ERR_RATE_LIMIT(CAM_CRM, "Invalid type:%d", type);
 		goto device_priv_fail;
 	}
 

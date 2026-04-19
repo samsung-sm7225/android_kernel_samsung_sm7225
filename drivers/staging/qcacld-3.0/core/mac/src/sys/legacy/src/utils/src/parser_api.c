@@ -654,7 +654,7 @@ populate_dot11f_ext_supp_rates(struct mac_context *mac, uint8_t nChannelNum,
 		n_rates = mac->mlme_cfg->rates.ext_opr_rate_set.len;
 		nsir_status = wlan_mlme_get_cfg_str(
 			rates,
-		&mac->mlme_cfg->rates.ext_opr_rate_set, &n_rates);
+			&mac->mlme_cfg->rates.ext_opr_rate_set, &n_rates);
 		if (QDF_IS_STATUS_ERROR(nsir_status)) {
 			n_rates = 0;
 			pe_err("Failed to retrieve nItem from CFG status: %d",
@@ -663,7 +663,7 @@ populate_dot11f_ext_supp_rates(struct mac_context *mac, uint8_t nChannelNum,
 		}
 	}
 
-		if (0 != n_rates) {
+	if (0 != n_rates) {
 		pe_debug("ext supp rates present, num %d", (uint8_t)n_rates);
 		pDot11f->num_rates = (uint8_t)n_rates;
 		qdf_mem_copy(pDot11f->rates, rates, n_rates);
@@ -5911,7 +5911,7 @@ QDF_STATUS populate_dot11f_rrm_ie(struct mac_context *mac,
 
 void populate_mdie(struct mac_context *mac,
 		   tDot11fIEMobilityDomain *pDot11f,
-		   uint8_t mdie[SIR_MDIE_SIZE])
+		   uint8_t mdie[])
 {
 	pDot11f->present = 1;
 	pDot11f->MDID = (uint16_t) ((mdie[1] << 8) | (mdie[0]));

@@ -573,7 +573,7 @@ static int cam_vfe_rdi_handle_irq_bottom_half(void *handler_priv,
 			rdi_priv->event_cb(rdi_priv->priv,
 			CAM_ISP_HW_EVENT_ERROR,
 			(void *)&evt_info);
-		cam_vfe_rdi_fifo_fill_level_dump(soc_private);
+
 		cam_cpas_get_camnoc_fifo_fill_level_info(
 			soc_private->cpas_version,
 			soc_private->cpas_handle);

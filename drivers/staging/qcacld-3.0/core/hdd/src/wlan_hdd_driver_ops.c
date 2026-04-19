@@ -1390,8 +1390,7 @@ out:
 		cds_is_fw_down())
 		return 0;
 
-	if (status != -ETIMEDOUT)
-		QDF_BUG(false);
+	QDF_BUG(false);
 
 	return status;
 }

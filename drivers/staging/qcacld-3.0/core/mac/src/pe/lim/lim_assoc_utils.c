@@ -1573,7 +1573,6 @@ static void lim_remove_membership_selectors(tSirMacRateSet *rate_set)
 	rate_set->numRates -= selector_count;
 }
 
-
 QDF_STATUS lim_populate_peer_rate_set(struct mac_context *mac,
 				      struct supported_rates *pRates,
 				      uint8_t *pSupportedMCSSet,
@@ -1586,7 +1585,7 @@ QDF_STATUS lim_populate_peer_rate_set(struct mac_context *mac,
 {
 	tSirMacRateSet tempRateSet;
 	tSirMacRateSet tempRateSet2;
-	uint32_t i, j, val, min, isArate = 0;
+	uint32_t i, j, val, min;
 	qdf_size_t val_len;
 	uint8_t aRateIndex = 0;
 	uint8_t bRateIndex = 0;
@@ -1622,11 +1621,10 @@ QDF_STATUS lim_populate_peer_rate_set(struct mac_context *mac,
 		}
 	} else
 		tempRateSet2.numRates = 0;
-	
+
 	lim_remove_membership_selectors(&tempRateSet);
 	lim_remove_membership_selectors(&tempRateSet2);
 
-	
 	if ((tempRateSet.numRates + tempRateSet2.numRates) >
 	    WLAN_SUPPORTED_RATES_IE_MAX_LEN) {
 		pe_err("more than 12 rates in CFG");
@@ -1647,7 +1645,6 @@ QDF_STATUS lim_populate_peer_rate_set(struct mac_context *mac,
 	for (i = 0; i < tempRateSet.numRates; i++) {
 		min = 0;
 		val = 0xff;
-		isArate = 0;
 		for (j = 0; (j < tempRateSet.numRates) &&
 		     (j < WLAN_SUPPORTED_RATES_IE_MAX_LEN); j++) {
 			if ((uint32_t)(tempRateSet.rate[j] & 0x7f) <
@@ -1656,8 +1653,6 @@ QDF_STATUS lim_populate_peer_rate_set(struct mac_context *mac,
 				min = j;
 			}
 		}
-		if (sirIsArate(tempRateSet.rate[min] & 0x7f))
-			isArate = 1;
 		/*
 		 * HAL needs to know whether the rate is basic rate or not,
 		 * as it needs to update the response rate table accordingly.
@@ -1665,22 +1660,33 @@ QDF_STATUS lim_populate_peer_rate_set(struct mac_context *mac,
 		 * can be used for sending control frames. HAL updates the
 		 * response rate table whenever basic rate set is changed.
 		 */
-		if (basicOnly) {
-			if (tempRateSet.rate[min] & 0x80) {
-				if (isArate)
-					pRates->llaRates[aRateIndex++] =
+		if (basicOnly && !(tempRateSet.rate[min] & 0x80)) {
+			pe_debug("Invalid basic rate");
+		} else if (sirIsArate(tempRateSet.rate[min] & 0x7f)) {
+			if (aRateIndex >= SIR_NUM_11A_RATES) {
+				pe_debug("OOB, aRateIndex: %d", aRateIndex);
+			} else if (aRateIndex >= 1 && (tempRateSet.rate[min] ==
+				   pRates->llaRates[aRateIndex - 1])) {
+				pe_debug("Duplicate 11a rate: %d",
+					 tempRateSet.rate[min]);
+			} else {
+				pRates->llaRates[aRateIndex++] =
 						tempRateSet.rate[min];
-				else
-					pRates->llbRates[bRateIndex++] =
+			}
+		} else if (sirIsBrate(tempRateSet.rate[min] & 0x7f)) {
+			if (bRateIndex >= SIR_NUM_11B_RATES) {
+				pe_debug("OOB, bRateIndex: %d", bRateIndex);
+			} else if (bRateIndex >= 1 && (tempRateSet.rate[min] ==
+				   pRates->llbRates[bRateIndex - 1])) {
+				pe_debug("Duplicate 11b rate: %d",
+					 tempRateSet.rate[min]);
+			} else {
+				pRates->llbRates[bRateIndex++] =
 						tempRateSet.rate[min];
 			}
 		} else {
-			if (isArate)
-				pRates->llaRates[aRateIndex++] =
-					tempRateSet.rate[min];
-			else
-				pRates->llbRates[bRateIndex++] =
-					tempRateSet.rate[min];
+			pe_debug("%d is neither 11a nor 11b rate",
+				 tempRateSet.rate[min]);
 		}
 		tempRateSet.rate[min] = 0xff;
 	}
@@ -1826,7 +1832,7 @@ QDF_STATUS lim_populate_matching_rate_set(struct mac_context *mac_ctx,
 		temp_rate_set2.numRates = 0;
 	}
 
-    lim_remove_membership_selectors(&temp_rate_set);
+	lim_remove_membership_selectors(&temp_rate_set);
 	lim_remove_membership_selectors(&temp_rate_set2);
 
 	/*
@@ -1835,7 +1841,7 @@ QDF_STATUS lim_populate_matching_rate_set(struct mac_context *mac_ctx,
 	 * might have caused total sum to be less than 12
 	 */
 	if (((uint16_t)temp_rate_set.numRates +
-	   (uint16_t)temp_rate_set2.numRates) > SIR_MAC_MAX_NUMBER_OF_RATES) {
+	    (uint16_t)temp_rate_set2.numRates) > SIR_MAC_MAX_NUMBER_OF_RATES) {
 		pe_err("more than 12 rates in CFG");
 		return QDF_STATUS_E_FAILURE;
 	}
@@ -2164,9 +2170,12 @@ lim_add_sta(struct mac_context *mac_ctx,
 	/* Update VHT/HT Capability */
 	if (LIM_IS_AP_ROLE(session_entry) ||
 	    LIM_IS_IBSS_ROLE(session_entry)) {
-		add_sta_params->htCapable = sta_ds->mlmStaContext.htCapability;
+		add_sta_params->htCapable =
+				sta_ds->mlmStaContext.htCapability &&
+				session_entry->htCapability;;
 		add_sta_params->vhtCapable =
-			 sta_ds->mlmStaContext.vhtCapability;
+				sta_ds->mlmStaContext.vhtCapability &&
+				session_entry->vhtCapability;
 	}
 #ifdef FEATURE_WLAN_TDLS
 	/* SystemRole shouldn't be matter if staType is TDLS peer */

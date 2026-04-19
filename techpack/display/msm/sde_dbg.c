@@ -215,6 +215,7 @@ struct sde_dbg_regbuf {
 /**
  * struct sde_dbg_base - global sde debug base structure
  * @evtlog: event log instance
+ * @reglog: reg log instance
  * @reg_dump_base: base address of register dump region
  * @reg_base_list: list of register dumping regions
  * @dev: device pointer
@@ -231,11 +232,13 @@ struct sde_dbg_regbuf {
  * @dsi_dbg_bus: dump dsi debug bus register
  * @regbuf: buffer data to track the register dumping in hw recovery
  * @cur_evt_index: index used for tracking event logs dump in hw recovery
+ * @cur_reglog_index: index used for tracking register logs dump in hw recovery
  * @dbgbus_dump_idx: index used for tracking dbg-bus dump in hw recovery
  * @vbif_dbgbus_dump_idx: index for tracking vbif dumps in hw recovery
  */
 static struct sde_dbg_base {
 	struct sde_dbg_evtlog *evtlog;
+	struct sde_dbg_reglog *reglog;
 	struct list_head reg_base_list;
 	void *reg_dump_base;
 	void *reg_dump_addr;
@@ -259,6 +262,7 @@ static struct sde_dbg_base {
 
 	struct sde_dbg_regbuf regbuf;
 	u32 cur_evt_index;
+	u32 cur_reglog_index;
 	u32 dbgbus_dump_idx;
 	u32 vbif_dbgbus_dump_idx;
 	enum sde_dbg_dump_context dump_mode;
@@ -266,6 +270,9 @@ static struct sde_dbg_base {
 
 /* sde_dbg_base_evtlog - global pointer to main sde event log for macro use */
 struct sde_dbg_evtlog *sde_dbg_base_evtlog;
+
+/* sde_dbg_base_reglog - global pointer to main sde reg log for macro use */
+struct sde_dbg_reglog *sde_dbg_base_reglog;
 
 static void _sde_debug_bus_xbar_dump(void __iomem *mem_base,
 		struct sde_debug_bus_entry *entry, u32 val)
@@ -3301,7 +3308,7 @@ static void _sde_dbg_dump_sde_dbg_bus(struct sde_dbg_sde_debug_bus *bus)
 
 	if (in_mem) {
 		if (!(*dump_mem))
-			*dump_mem = vzalloc(list_size);
+			*dump_mem =  vzalloc(list_size);
 
 		if (*dump_mem) {
 			dump_addr = *dump_mem;
@@ -3460,7 +3467,7 @@ static void _sde_dbg_dump_vbif_dbg_bus(struct sde_dbg_vbif_debug_bus *bus)
 
 	if (in_mem) {
 		if (!(*dump_mem))
-			*dump_mem = vzalloc(list_size);
+			*dump_mem =  vzalloc(list_size);
 
 		if (*dump_mem) {
 			dump_addr = *dump_mem;
@@ -3745,46 +3752,6 @@ void sde_dbg_ctrl(const char *name, ...)
 
 	va_end(args);
 }
-
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-void ss_sde_dbg_debugfs_open(void)
-{
-	mutex_lock(&sde_dbg_base.mutex);
-	sde_dbg_base.cur_evt_index = 0;
-	sde_dbg_base.evtlog->first = sde_dbg_base.evtlog->curr + 1;
-	sde_dbg_base.evtlog->last =
-		sde_dbg_base.evtlog->first + SDE_EVTLOG_ENTRY;
-	mutex_unlock(&sde_dbg_base.mutex);
-}
-
-ssize_t ss_sde_evtlog_dump_read(struct file *file, char __user *buff,
-		size_t count, loff_t *ppos)
-{
-	ssize_t len = 0;
-	char evtlog_buf[SDE_EVTLOG_BUF_MAX];
-
-	if (!buff || !ppos)
-		return -EINVAL;
-
-	mutex_lock(&sde_dbg_base.mutex);
-	len = sde_evtlog_dump_to_buffer(sde_dbg_base.evtlog,
-			evtlog_buf, SDE_EVTLOG_BUF_MAX,
-			!sde_dbg_base.cur_evt_index, true);
-	sde_dbg_base.cur_evt_index++;
-	mutex_unlock(&sde_dbg_base.mutex);
-
-	if (len < 0 || len > count) {
-		pr_err("len is more than user buffer size\n");
-		return 0;
-	}
-
-	if (copy_to_user(buff, evtlog_buf, len))
-		return -EFAULT;
-	*ppos += len;
-
-	return len;
-}
-#endif
 
 #ifdef CONFIG_DEBUG_FS
 /*
@@ -4807,6 +4774,12 @@ int sde_dbg_init(struct device *dev)
 
 	sde_dbg_base_evtlog = sde_dbg_base.evtlog;
 
+	sde_dbg_base.reglog = sde_reglog_init();
+	if (IS_ERR_OR_NULL(sde_dbg_base.reglog))
+		return PTR_ERR(sde_dbg_base.reglog);
+
+	sde_dbg_base_reglog = sde_dbg_base.reglog;
+
 	INIT_WORK(&sde_dbg_base.dump_work, _sde_dump_work);
 	sde_dbg_base.work_panic = false;
 #if defined(CONFIG_DISPLAY_SAMSUNG) && defined(CONFIG_SEC_DEBUG)
@@ -4855,20 +4828,21 @@ static void sde_dbg_buses_destroy(void)
 
 	vfree(dbg_base->dbgbus_sde.cmn.dumped_content);
 	vfree(dbg_base->dbgbus_vbif_rt.cmn.dumped_content);
-	/*vfree(dbg_base->dbgbus_dsi.cmn.dumped_content); Not merged yet */
-	/*vfree(dbg_base->dbgbus_lutdma.cmn.dumped_content); Not merged yet */
 }
+
 /**
  * sde_dbg_destroy - destroy sde debug facilities
  */
 void sde_dbg_destroy(void)
 {
-	kfree(sde_dbg_base.regbuf.buf);
+	vfree(sde_dbg_base.regbuf.buf);
 	memset(&sde_dbg_base.regbuf, 0, sizeof(sde_dbg_base.regbuf));
 	_sde_dbg_debugfs_destroy();
 	sde_dbg_base_evtlog = NULL;
 	sde_evtlog_destroy(sde_dbg_base.evtlog);
 	sde_dbg_base.evtlog = NULL;
+	sde_reglog_destroy(sde_dbg_base.reglog);
+	sde_dbg_base.reglog = NULL;
 	sde_dbg_reg_base_destroy();
 	sde_dbg_buses_destroy();
 	mutex_destroy(&sde_dbg_base.mutex);

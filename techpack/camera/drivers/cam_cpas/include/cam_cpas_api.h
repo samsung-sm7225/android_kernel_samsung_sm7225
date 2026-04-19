@@ -666,5 +666,4 @@ int cam_cpas_hw_get_camnoc_fill_level_info(
 	uint32_t cpas_version,
 	uint32_t client_handle);
 
-
 #endif /* _CAM_CPAS_API_H_ */

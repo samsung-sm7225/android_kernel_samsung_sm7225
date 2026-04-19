@@ -522,10 +522,9 @@ static struct cam_cpas_hw_errata_wa_list cam170_cpas200_errata_wa_list = {
 };
 
 struct cam_camnoc_fifo_lvl_info cam170_cpas200_camnoc_fifo_info = {
-	.IFE01_MAXWR_LOW = 0x2420,
-	.IFE23_MAXWR_LOW = 0x2620,
+	.IFE02_MAXWR_LOW = 0x420,
+	.IFE13_MAXWR_LOW = 0x820,
 };
-
 
 static struct cam_camnoc_info cam170_cpas200_camnoc_info = {
 	.specific = &cam_cpas_v170_200_camnoc_specific[0],

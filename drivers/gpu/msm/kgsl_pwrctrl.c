@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
@@ -51,6 +52,7 @@ static const char * const clocks[] = {
 	"gmu_clk",
 	"ahb_clk",
 	"smmu_vote",
+	"apb_pclk",
 };
 
 static unsigned long ib_votes[KGSL_MAX_BUSLEVELS];
@@ -1528,21 +1530,22 @@ static ssize_t temp_show(struct device *dev,
 	struct kgsl_device *device = dev_get_drvdata(dev);
 	struct device *_dev;
 	struct thermal_zone_device *thermal_dev;
-	int temperature = 0, max_temp = 0;
+	int temperature = INT_MIN, max_temp = INT_MIN;
 	const char *name;
 	struct property *prop;
 
 	_dev = &device->pdev->dev;
 
-	of_property_for_each_string(_dev->of_node, "qcom,tzone-names", prop, name) {
+	of_property_for_each_string(_dev->of_node,
+		"qcom,tzone-names", prop, name) {
 		thermal_dev = thermal_zone_get_zone_by_name(name);
-		
+
 		if (IS_ERR(thermal_dev))
 			continue;
 
 		if (thermal_zone_get_temp(thermal_dev, &temperature))
 			continue;
-			
+
 		max_temp = max(temperature, max_temp);
 	}
 

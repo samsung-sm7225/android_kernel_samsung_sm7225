@@ -738,6 +738,12 @@ static int cam_vfe_camif_process_cmd(struct cam_isp_resource_node *rsrc_node,
 	case CAM_ISP_HW_CMD_GET_IRQ_REGISTER_DUMP:
 		rc = cam_vfe_camif_irq_reg_dump(rsrc_node);
 		break;
+	case CAM_ISP_HW_CMD_QUERY_REGSPACE_DATA:
+		camif_priv = (struct cam_vfe_mux_camif_data *)
+			rsrc_node->res_priv;
+		*((struct cam_hw_soc_info **)cmd_args) = camif_priv->soc_info;
+		rc = 0;
+		break;
 	default:
 		CAM_ERR(CAM_ISP,
 			"unsupported process command:%d", cmd_type);
@@ -913,7 +919,9 @@ static int cam_vfe_camif_handle_irq_bottom_half(void *handler_priv,
 		CAM_INFO(CAM_ISP, "ife_clk_src:%lld",
 			soc_private->ife_clk_src);
 
-		cam_vfe_camif_fifo_fill_level_dump(soc_private);
+		cam_cpas_get_camnoc_fifo_fill_level_info(
+			soc_private->cpas_version,
+			soc_private->cpas_handle);
 		cam_cpas_log_votes();
 
 		if (camif_priv->camif_debug & CAMIF_DEBUG_ENABLE_REG_DUMP)
@@ -946,7 +954,9 @@ static int cam_vfe_camif_handle_irq_bottom_half(void *handler_priv,
 		CAM_INFO(CAM_ISP, "ife_clk_src:%lld",
 			soc_private->ife_clk_src);
 
-		cam_vfe_camif_fifo_fill_level_dump(soc_private);
+		cam_cpas_get_camnoc_fifo_fill_level_info(
+			soc_private->cpas_version,
+			soc_private->cpas_handle);
 		cam_cpas_log_votes();
 
 		if (camif_priv->camif_debug & CAMIF_DEBUG_ENABLE_REG_DUMP)

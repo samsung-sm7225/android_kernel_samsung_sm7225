@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -771,25 +771,11 @@ int cam_cpas_hw_get_camnoc_fill_level_info(
 			val);
 
 		break;
-		case CAM_CPAS_TITAN_170_V200:
-		cam_cpas_reg_read(client_handle,
-			CAM_CPAS_REG_CAMNOC, camnoc_reg_info->IFE01_MAXWR_LOW,
-			true, &val);
-		CAM_INFO(CAM_ISP, "IFE01_MAXWR_LOW offset 0x%x val 0x%x",
-			camnoc_reg_info->IFE01_MAXWR_LOW,
-			val);
-
-		cam_cpas_reg_read(client_handle,
-			CAM_CPAS_REG_CAMNOC, camnoc_reg_info->IFE23_MAXWR_LOW,
-			true, &val);
-		CAM_INFO(CAM_ISP, "IFE23_MAXWR_LOW offset 0x%x val 0x%x",
-			camnoc_reg_info->IFE23_MAXWR_LOW,
-			val);
-		break;
 	case CAM_CPAS_TITAN_150_V100:
 	case CAM_CPAS_TITAN_170_V100:
 	case CAM_CPAS_TITAN_170_V110:
 	case CAM_CPAS_TITAN_170_V120:
+	case CAM_CPAS_TITAN_170_V200:
 	case CAM_CPAS_TITAN_175_V100:
 	case CAM_CPAS_TITAN_175_V101:
 		cam_cpas_reg_read(client_handle,
@@ -813,7 +799,6 @@ int cam_cpas_hw_get_camnoc_fill_level_info(
 	}
 	return 0;
 }
-
 
 int cam_cpastop_get_internal_ops(struct cam_cpas_internal_ops *internal_ops)
 {
