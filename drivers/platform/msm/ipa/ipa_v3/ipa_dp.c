@@ -1949,6 +1949,9 @@ static struct ipa3_rx_pkt_wrapper *ipa3_alloc_rx_pkt_page(
 	struct ipa3_rx_pkt_wrapper *rx_pkt;
 
 	flag |= __GFP_NOMEMALLOC;
+	if (is_tmp_alloc)
+		flag |= (__GFP_NORETRY | __GFP_NOWARN);
+
 	rx_pkt = kmem_cache_zalloc(ipa3_ctx->rx_pkt_wrapper_cache,
 		flag);
 	if (unlikely(!rx_pkt))
@@ -2029,7 +2032,7 @@ begin:
 			goto fail_kmem_cache_alloc;
 		rx_pkt = ipa3_alloc_rx_pkt_page(GFP_KERNEL, true);
 		if (unlikely(!rx_pkt)) {
-			IPAERR("ipa3_alloc_rx_pkt_page fails\n");
+			IPAERR_RL("ipa3_alloc_rx_pkt_page fails\n");
 			break;
 		}
 		rx_pkt->sys = sys;
@@ -3033,8 +3036,9 @@ begin:
 							status.endp_src_idx,
 							status.endp_dest_idx,
 							status.pkt_len);
-						/* Unexpected HW status */
-						ipa_assert();
+
+						sys->drop_packet = true;
+						dev_kfree_skb_any(skb2);
 					} else {
 						skb2->truesize = skb2->len +
 						sizeof(struct sk_buff) +

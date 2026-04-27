@@ -511,6 +511,21 @@ out:
 	return ERR_PTR(err);
 }
 
+/* @fs.sec -- 63ff82f9216c9b6d003e7d45699d54b833344719 -- */
+static int fuse_dentry_delete(const struct dentry *dentry)
+{
+	struct fuse_inode *fi;
+
+	if (d_really_is_negative(dentry))
+		return 0;
+
+	fi = get_fuse_inode(d_inode(dentry));
+	if (test_bit(FUSE_I_ATTR_FORCE_SYNC, &fi->state))
+		return 1;
+
+	return 0;
+}
+
 const struct dentry_operations fuse_dentry_operations = {
 	.d_revalidate	= fuse_dentry_revalidate,
 	.d_delete	= fuse_dentry_delete,

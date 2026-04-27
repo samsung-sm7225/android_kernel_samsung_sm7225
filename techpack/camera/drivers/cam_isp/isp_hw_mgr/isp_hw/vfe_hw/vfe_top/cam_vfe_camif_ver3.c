@@ -1358,7 +1358,7 @@ static int cam_vfe_camif_ver3_handle_irq_bottom_half(void *handler_priv,
 	camif_node = handler_priv;
 	camif_priv = camif_node->res_priv;
 	payload = evt_payload_priv;
-
+    
 	soc_info = camif_priv->soc_info;
 	soc_private =
 		(struct cam_vfe_soc_private *)soc_info->soc_private;

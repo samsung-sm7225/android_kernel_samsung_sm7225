@@ -20,6 +20,10 @@
 #include "sde_dbg.h"
 #include "sde/sde_hw_catalog.h"
 
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+#include "ss_dsi_panel_common.h"
+#endif
+
 #define SDE_DBG_BASE_MAX		10
 
 #define DEFAULT_PANIC		1
@@ -76,6 +80,19 @@
 #define DUMP_CLMN_COUNT			4
 #define DUMP_LINE_SIZE			256
 #define DUMP_MAX_LINES_PER_BLK		512
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+/**
+ * To print in kernel log
+ */
+#undef DEFAULT_REGDUMP
+#undef DEFAULT_DBGBUS_SDE
+#undef DEFAULT_DBGBUS_VBIFRT
+
+#define DEFAULT_REGDUMP		SDE_DBG_DUMP_IN_LOG
+#define DEFAULT_DBGBUS_SDE	SDE_DBG_DUMP_IN_LOG
+#define DEFAULT_DBGBUS_VBIFRT	SDE_DBG_DUMP_IN_LOG
+#endif
 
 /**
  * struct sde_dbg_reg_offset - tracking for start and end of region
@@ -3291,7 +3308,7 @@ static void _sde_dbg_dump_sde_dbg_bus(struct sde_dbg_sde_debug_bus *bus)
 
 	if (in_mem) {
 		if (!(*dump_mem))
-			*dump_mem =  vzalloc(list_size);
+			*dump_mem = vzalloc(list_size);
 
 		if (*dump_mem) {
 			dump_addr = *dump_mem;
@@ -3450,7 +3467,7 @@ static void _sde_dbg_dump_vbif_dbg_bus(struct sde_dbg_vbif_debug_bus *bus)
 
 	if (in_mem) {
 		if (!(*dump_mem))
-			*dump_mem =  vzalloc(list_size);
+			*dump_mem = vzalloc(list_size);
 
 		if (*dump_mem) {
 			dump_addr = *dump_mem;
@@ -3577,6 +3594,11 @@ static void _sde_dump_array(struct sde_dbg_reg_base *blk_arr[],
 	if (sde_dbg_base.dsi_dbg_bus || dump_all)
 		dsi_ctrl_debug_dump(sde_dbg_base.dbgbus_dsi.entries,
 				    sde_dbg_base.dbgbus_dsi.size);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	if (do_panic && sde_dbg_base.panic_on_err)
+		ss_store_xlog_panic_dbg();
+#endif
 
 	if (do_panic && sde_dbg_base.panic_on_err)
 		panic(name);
@@ -3730,6 +3752,46 @@ void sde_dbg_ctrl(const char *name, ...)
 
 	va_end(args);
 }
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+void ss_sde_dbg_debugfs_open(void)
+{
+	mutex_lock(&sde_dbg_base.mutex);
+	sde_dbg_base.cur_evt_index = 0;
+	sde_dbg_base.evtlog->first = sde_dbg_base.evtlog->curr + 1;
+	sde_dbg_base.evtlog->last =
+		sde_dbg_base.evtlog->first + SDE_EVTLOG_ENTRY;
+	mutex_unlock(&sde_dbg_base.mutex);
+}
+
+ssize_t ss_sde_evtlog_dump_read(struct file *file, char __user *buff,
+		size_t count, loff_t *ppos)
+{
+	ssize_t len = 0;
+	char evtlog_buf[SDE_EVTLOG_BUF_MAX];
+
+	if (!buff || !ppos)
+		return -EINVAL;
+
+	mutex_lock(&sde_dbg_base.mutex);
+	len = sde_evtlog_dump_to_buffer(sde_dbg_base.evtlog,
+			evtlog_buf, SDE_EVTLOG_BUF_MAX,
+			!sde_dbg_base.cur_evt_index, true);
+	sde_dbg_base.cur_evt_index++;
+	mutex_unlock(&sde_dbg_base.mutex);
+
+	if (len < 0 || len > count) {
+		pr_err("len is more than user buffer size\n");
+		return 0;
+	}
+
+	if (copy_to_user(buff, evtlog_buf, len))
+		return -EFAULT;
+	*ppos += len;
+
+	return len;
+}
+#endif
 
 #ifdef CONFIG_DEBUG_FS
 /*
@@ -4629,8 +4691,13 @@ int sde_dbg_debugfs_register(struct device *dev)
 
 	debugfs_create_file("dbg_ctrl", 0600, debugfs_root, NULL,
 			&sde_dbg_ctrl_fops);
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	debugfs_create_file("dump", 0644, debugfs_root, NULL,
+#else
 	debugfs_create_file("dump", 0600, debugfs_root, NULL,
-			&sde_evtlog_fops);
+#endif
+		&sde_evtlog_fops);
+
 	debugfs_create_u32("enable", 0600, debugfs_root,
 			&(sde_dbg_base.evtlog->enable));
 	debugfs_create_u32("panic", 0600, debugfs_root,
@@ -4755,7 +4822,14 @@ int sde_dbg_init(struct device *dev)
 
 	INIT_WORK(&sde_dbg_base.dump_work, _sde_dump_work);
 	sde_dbg_base.work_panic = false;
+#if defined(CONFIG_DISPLAY_SAMSUNG) && defined(CONFIG_SEC_DEBUG)
+	if (sec_debug_is_enabled())
+		sde_dbg_base.panic_on_err = DEFAULT_PANIC;
+	else
+		sde_dbg_base.panic_on_err = 0;
+#else
 	sde_dbg_base.panic_on_err = DEFAULT_PANIC;
+#endif
 	sde_dbg_base.enable_reg_dump = DEFAULT_REGDUMP;
 	memset(&sde_dbg_base.regbuf, 0, sizeof(sde_dbg_base.regbuf));
 

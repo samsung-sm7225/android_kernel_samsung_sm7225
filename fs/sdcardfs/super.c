@@ -80,6 +80,11 @@ static int sdcardfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	err = vfs_statfs(&lower_path, buf);
 	sdcardfs_put_lower_path(dentry, &lower_path);
 
+	if (uid_eq(GLOBAL_ROOT_UID, current_fsuid()) ||
+			capable(CAP_SYS_RESOURCE) ||
+			in_group_p(AID_USE_ROOT_RESERVED))
+		goto out;
+
 	if (sbi->options.reserved_mb) {
 		/* Invalid statfs informations. */
 		if (buf->f_bsize == 0) {
@@ -98,9 +103,58 @@ static int sdcardfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 		/* Make reserved blocks invisiable to media storage */
 		buf->f_bfree = buf->f_bavail;
 	}
-
+out:
 	/* set return buf to our f/s to avoid confusing user-level utils */
 	buf->f_type = SDCARDFS_SUPER_MAGIC;
+
+	return err;
+}
+
+/*
+ * @flags: numeric mount options
+ * @options: mount options string
+ */
+static int sdcardfs_remount_fs(struct super_block *sb, int *flags, char *options)
+{
+	int err = 0;
+
+	/*
+	 * The VFS will take care of "ro" and "rw" flags among others.  We
+	 * can safely accept a few flags (RDONLY, MANDLOCK), and honor
+	 * SILENT, but anything else left over is an error.
+	 */
+	if ((*flags & ~(MS_RDONLY | MS_MANDLOCK | MS_SILENT)) != 0) {
+		pr_err("sdcardfs: remount flags 0x%x unsupported\n", *flags);
+		err = -EINVAL;
+	}
+
+	return err;
+}
+
+/*
+ * @mnt: mount point we are remounting
+ * @sb: superblock we are remounting
+ * @flags: numeric mount options
+ * @options: mount options string
+ */
+static int sdcardfs_remount_fs2(struct vfsmount *mnt, struct super_block *sb,
+						int *flags, char *options)
+{
+	int err = 0;
+
+	/*
+	 * The VFS will take care of "ro" and "rw" flags among others.  We
+	 * can safely accept a few flags (RDONLY, MANDLOCK), and honor
+	 * SILENT, but anything else left over is an error.
+	 */
+	if ((*flags & ~(MS_RDONLY | MS_MANDLOCK | MS_SILENT | MS_REMOUNT)) != 0) {
+		pr_err("sdcardfs: remount flags 0x%x unsupported\n", *flags);
+		err = -EINVAL;
+	}
+	/* @fs.sec -- 4DC77922893C8B8AE33DD84EE050EBBF -- */
+	pr_info("Remount options were %s\n", options);
+	err = parse_options_remount(sb, options, *flags & ~MS_SILENT, mnt->data);
+
 
 	return err;
 }

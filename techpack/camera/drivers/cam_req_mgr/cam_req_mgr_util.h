@@ -49,6 +49,7 @@ struct handle {
 	uint32_t hdl_value;
 	enum hdl_type type;
 	enum hdl_state state;
+	uint64_t dev_id;
 	void *ops;
 	void *priv;
 };
@@ -79,6 +80,7 @@ struct cam_create_dev_hdl {
 	int32_t v4l2_sub_dev_flag;
 	int32_t media_entity_flag;
 	int32_t reserved;
+	uint64_t dev_id;
 	void *ops;
 	void *priv;
 };

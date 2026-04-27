@@ -8,6 +8,7 @@
 #include <soc/qcom/rmnet_qmi.h>
 #include <soc/qcom/qmi_rmnet.h>
 #include "dfc_defs.h"
+#include <linux/netlog.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/dfc.h>
@@ -1049,8 +1050,13 @@ static int dfc_update_fc_map(struct net_device *dev, struct qos_info *qos,
 		itm->last_seq = fc_info->seq_num;
 		itm->last_adjusted_grant = adjusted_grant;
 
-		if (action)
+		if (action) {
+			net_log("I> m=%d b=%d gr=%d s=%d a=%d\n",
+				fc_info->mux_id, fc_info->bearer_id,
+				fc_info->num_bytes, fc_info->seq_num,
+				ancillary);
 			rc = dfc_bearer_flow_ctl(dev, itm, qos);
+		}
 	}
 
 	return rc;
@@ -1153,6 +1159,8 @@ static void dfc_update_tx_link_status(struct net_device *dev,
 	}
 
 	itm->tx_off = !tx_status;
+	net_log("Link> %s, b=%d, status %d\n", dev->name,
+		binfo->bearer_id, tx_status);
 }
 
 void dfc_handle_tx_link_status_ind(struct dfc_qmi_data *dfc,

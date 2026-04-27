@@ -33,6 +33,10 @@
 #include <trace/events/f2fs.h>
 #include <uapi/linux/f2fs.h>
 
+#ifdef CONFIG_FSCRYPT_SDP
+#include <linux/fscrypto_sdp_ioctl.h>
+#endif
+
 static vm_fault_t f2fs_filemap_fault(struct vm_fault *vmf)
 {
 	struct inode *inode = file_inode(vmf->vma->vm_file);
@@ -224,6 +228,8 @@ static inline enum cp_reason_type need_do_checkpoint(struct inode *inode)
 							XATTR_DIR_INO))
 		cp_reason = CP_XATTR_DIR;
 
+	sbi->sec_stat.cpr_cnt[cp_reason]++;
+
 	return cp_reason;
 }
 
@@ -252,6 +258,21 @@ static void try_to_fix_pino(struct inode *inode)
 	f2fs_up_write(&fi->i_sem);
 }
 
+/* P190723-05556 */
+static inline bool should_issue_flush(struct f2fs_sb_info *sbi)
+{
+	if (F2FS_OPTION(sbi).fsync_mode != FSYNC_MODE_NOBARRIER)
+		return true;
+
+	if (uid_eq(make_kuid(&init_user_ns, F2FS_DEF_RESUID), current_fsuid()))
+		return true;
+
+	if (in_group_p(F2FS_OPTION(sbi).flush_group))
+		return true;
+
+	return false;
+}
+
 static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 						int datasync, bool atomic)
 {
@@ -274,6 +295,9 @@ static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 
 	if (S_ISDIR(inode->i_mode))
 		goto go_write;
+
+	sbi->sec_stat.fsync_count++;
+	sbi->sec_stat.fsync_dirty_pages += get_dirty_pages(inode);
 
 	/* if fdatasync is triggered, let's do in-place-update */
 	if (datasync || get_dirty_pages(inode) <= SM_I(sbi)->min_fsync_blocks)
@@ -339,6 +363,7 @@ go_write:
 		try_to_fix_pino(inode);
 		clear_inode_flag(inode, FI_APPEND_WRITE);
 		clear_inode_flag(inode, FI_UPDATE_WRITE);
+		sbi->sec_stat.cp_cnt[STAT_CP_FSYNC]++;
 		goto out;
 	}
 sync_nodes:

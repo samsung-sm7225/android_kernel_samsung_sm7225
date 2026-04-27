@@ -1037,6 +1037,7 @@ next_step:
 		if (!err && gc_type == FG_GC)
 			submitted++;
 		stat_inc_node_blk_count(sbi, 1, gc_type);
+		sbi->sec_stat.gc_node_blk_count[gc_type]++;
 	}
 
 	if (++phase < 3)
@@ -1373,6 +1374,7 @@ static int move_data_block(struct inode *inode, block_t bidx,
 	fio.op = REQ_OP_WRITE;
 	fio.op_flags = REQ_SYNC;
 	fio.new_blkaddr = newaddr;
+	f2fs_cond_set_fua(&fio);
 	f2fs_submit_page_write(&fio);
 	if (fio.retry) {
 		err = -EAGAIN;
@@ -1445,6 +1447,7 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 		};
 		bool is_dirty = PageDirty(page);
 
+		f2fs_cond_set_fua(&fio);
 retry:
 		f2fs_wait_on_page_writeback(page, DATA, true, true);
 
@@ -1632,6 +1635,7 @@ next_step:
 			}
 
 			stat_inc_data_blk_count(sbi, 1, gc_type);
+			sbi->sec_stat.gc_data_blk_count[gc_type]++;
 		}
 	}
 
@@ -1740,10 +1744,11 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 		 *   - down_read(sentry_lock)     - change_curseg()
 		 *                                  - lock_page(sum_page)
 		 */
-		if (type == SUM_TYPE_NODE)
+		if (type == SUM_TYPE_NODE) {
 			submitted += gc_node_segment(sbi, sum->entries, segno,
 								gc_type);
-		else
+			sbi->sec_stat.gc_node_seg_count[gc_type]++;
+		} else {
 			submitted += gc_data_segment(sbi, sum->entries, gc_list,
 							segno, gc_type,
 							force_migrate);
@@ -1798,6 +1803,11 @@ int f2fs_gc(struct f2fs_sb_info *sbi, struct f2fs_gc_control *gc_control)
 				reserved_segments(sbi),
 				prefree_segments(sbi));
 
+	/* W/A for FG_GC failure due to Atomic Write File and Pinned File */
+	memset(DIRTY_I(sbi)->blacklist_victim_secmap, 0,
+					f2fs_bitmap_size(MAIN_SECS(sbi)));
+
+	gc_start_time = local_clock();
 	cpc.reason = __get_cp_reason(sbi);
 	sbi->skipped_gc_rwsem = 0;
 gc_more:
@@ -1890,6 +1900,7 @@ stop:
 	if (gc_type == FG_GC)
 		f2fs_unpin_all_sections(sbi, true);
 
+	gc_end_time = local_clock();
 	trace_f2fs_gc_end(sbi->sb, ret, total_freed, sec_freed,
 				get_pages(sbi, F2FS_DIRTY_NODES),
 				get_pages(sbi, F2FS_DIRTY_DENTS),

@@ -7082,6 +7082,8 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	idr_init(&ipa3_ctx->ipa_idr);
 	spin_lock_init(&ipa3_ctx->idr_lock);
 
+	spin_lock_init(&ipa3_ctx->page_pool_spinlock);
+
 	/* wlan related member */
 	memset(&ipa3_ctx->wc_memb, 0, sizeof(ipa3_ctx->wc_memb));
 	spin_lock_init(&ipa3_ctx->wc_memb.wlan_spinlock);

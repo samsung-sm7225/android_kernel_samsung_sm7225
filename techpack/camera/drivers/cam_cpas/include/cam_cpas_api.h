@@ -582,6 +582,7 @@ int cam_cpas_get_hw_info(
  * @return 0 on success.
  *
  */
+ 
 int cam_cpas_get_cpas_hw_version(
 	uint32_t				 *hw_version);
 

@@ -37,6 +37,7 @@
 #include <linux/uuid.h>
 #include <linux/errseq.h>
 #include <linux/ioprio.h>
+#include <linux/fs_types.h>
 #include <linux/android_kabi.h>
 
 #include <asm/byteorder.h>
@@ -525,6 +526,11 @@ static inline void i_mmap_unlock_write(struct address_space *mapping)
 	up_write(&mapping->i_mmap_rwsem);
 }
 
+static inline int i_mmap_trylock_read(struct address_space *mapping)
+{
+	return down_read_trylock(&mapping->i_mmap_rwsem);
+}
+
 static inline void i_mmap_lock_read(struct address_space *mapping)
 {
 	down_read(&mapping->i_mmap_rwsem);
@@ -692,6 +698,7 @@ struct inode {
 		struct rcu_head		i_rcu;
 	};
 	atomic64_t		i_version;
+	atomic64_t		i_dirty_page_count; /* temp variable to count dirty pages */
 	atomic64_t		i_sequence; /* see futex */
 	atomic_t		i_count;
 	atomic_t		i_dio_count;
@@ -965,6 +972,9 @@ struct file {
 	struct list_head	f_tfile_llink;
 #endif /* #ifdef CONFIG_EPOLL */
 	struct address_space	*f_mapping;
+#if defined(CONFIG_FIVE_PA_FEATURE) || defined(CONFIG_PROCA)
+	void *f_signature;
+#endif
 	errseq_t		f_wb_err;
 	errseq_t		f_sb_err; /* for syncfs */
 } __randomize_layout
@@ -1776,22 +1786,6 @@ int fiemap_fill_next_extent(struct fiemap_extent_info *info, u64 logical,
 int fiemap_check_flags(struct fiemap_extent_info *fieinfo, u32 fs_flags);
 
 /*
- * File types
- *
- * NOTE! These match bits 12..15 of stat.st_mode
- * (ie "(i_mode >> 12) & 15").
- */
-#define DT_UNKNOWN	0
-#define DT_FIFO		1
-#define DT_CHR		2
-#define DT_DIR		4
-#define DT_BLK		6
-#define DT_REG		8
-#define DT_LNK		10
-#define DT_SOCK		12
-#define DT_WHT		14
-
-/*
  * This is the "filldir" function type, used by readdir() to let
  * the kernel specify what kind of dirent layout it wants to have.
  * This allows the kernel to read directories into kernel space or
@@ -2391,6 +2385,7 @@ extern int thaw_super(struct super_block *super);
 extern bool our_mnt(struct vfsmount *mnt);
 extern __printf(2, 3)
 int super_setup_bdi_name(struct super_block *sb, char *fmt, ...);
+int sec_super_setup_bdi_name(struct super_block *sb, char *fmt, ...);
 extern int super_setup_bdi(struct super_block *sb);
 
 extern int current_umask(void);
@@ -3659,6 +3654,9 @@ static inline bool dir_relax_shared(struct inode *inode)
 
 extern bool path_noexec(const struct path *path);
 extern void inode_nohighmem(struct inode *inode);
+
+/* for Android P */
+#define AID_USE_ROOT_RESERVED KGIDT_INIT(5678)
 
 /* mm/fadvise.c */
 extern int vfs_fadvise(struct file *file, loff_t offset, loff_t len,

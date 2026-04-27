@@ -130,6 +130,11 @@ config SPARSEMEM_VMEMMAP
 config HAVE_MEMBLOCK
 	bool
 
+config MEMBLOCK_MEMSIZE
+	bool "memblock based reserved memory profiling"
+	depends on HAVE_MEMBLOCK
+	default y
+
 config HAVE_MEMBLOCK_NODE_MAP
 	bool
 
@@ -824,6 +829,21 @@ config HAVE_USERSPACE_LOW_MEMORY_KILLER
 	  Therefore, add a timeout mechanism to give the userspace
 	  low memory killer a chance to run.
 
+config KSWAPD_CPU
+	hex "Set kswapd cpu affinity by default"
+	default 0x3F
+	help
+	  Set kswapd cpu affinity by default. 0x3F means allowing CPU as 0 to 5.
+	  To disable this config, set this to 0.
+
+config MMAP_READAROUND_LIMIT
+	int "Limit mmap readaround upperbound"
+	default 0
+	help
+	  Inappropriate mmap readaround size can hurt device performance
+	  during the sluggish situation. Add the hard upper-limit for
+	  mmap readaround.
+
 config GUP_BENCHMARK
 	bool "Enable infrastructure for get_user_pages_fast() benchmarking"
 	default n
@@ -835,6 +855,23 @@ config GUP_BENCHMARK
 
 config ARCH_HAS_PTE_SPECIAL
 	bool
+
+config LARGE_DIRTY_BUFFER
+	bool "Use large dirty_threshold value by enabling dirty_ratio"
+	default n
+	help
+	  This config enables dirty_ratio/dirty_background_ratio,
+	  and it means large dirty_threshold value in 64bit architectures.
+	  If unsure, say N to use kernel default value
+
+config MAX_DIRTY_THRESH_PAGES
+	int "The upper bound of VM dirty_thresh value in number of pages"
+	depends on LARGE_DIRTY_BUFFER
+	default 25600
+	help
+	  This value is the upper bound of VM dirty-thresh. (0 means no limit.)
+	  It is only effective when dirty_ratio is used.
+	  (Setting dirty_bytes disables this option.)
 
 endmenu
 

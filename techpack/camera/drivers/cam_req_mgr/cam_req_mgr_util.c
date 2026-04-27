@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/*
+/* 
  * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
@@ -83,6 +83,21 @@ int cam_req_mgr_util_deinit(void)
 
 	return 0;
 }
+
+static void cam_dump_tbl_info(void)
+{
+	int i;
+
+	for (i = 0; i < CAM_REQ_MGR_MAX_HANDLES_V2; i++)
+		CAM_INFO_RATE_LIMIT_CUSTOM(CAM_CRM,
+			CAM_RATE_LIMIT_INTERVAL_5SEC,
+			CAM_REQ_MGR_MAX_HANDLES_V2,
+			"ses_hdl=%x hdl_value=%x type=%d state=%d dev_id=%lld",
+			hdl_tbl->hdl[i].session_hdl, hdl_tbl->hdl[i].hdl_value,
+			hdl_tbl->hdl[i].type, hdl_tbl->hdl[i].state,
+			hdl_tbl->hdl[i].dev_id);
+}
+
 
 int cam_req_mgr_util_free_hdls(void)
 {

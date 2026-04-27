@@ -194,3 +194,46 @@ obj-$(CONFIG_SIOX)		+= siox/
 obj-$(CONFIG_GNSS)		+= gnss/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 obj-$(CONFIG_ADSP_FACTORY)      += adsp_factory/
+
+obj-y				+= switch/
+
+# COMBO REDRIVER
+obj-$(CONFIG_COMBO_REDRIVER_PS5169)	+= redriver/
+
+# SPU signature verify
+obj-$(CONFIG_SPU_VERIFY) += spu_verify/
+
+# OLOG
+obj-y				+= kperfmon/
+obj-y += misc/drb/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += vibrator/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += nfc/nfc_logger/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += sti/abc/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += muic/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/input_boost/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += perf_mgr/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/sec_input/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += fingerprint/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += usb/typec/manager/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += usb/typec/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/touchscreen/focaltech/ft820x/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += battery/charger/sm5451_charger/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += vibrator/dc/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += mfd/sm/sm5714/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/misc/hall/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += battery/charger/pca9468_charger/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/touchscreen/himax/hx831xx/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += battery/charger/sm5440_charger/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/touchscreen/novatek/nt36523_spi/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/touchscreen/stm/fts5cu56a/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += regulator/s2mpb03/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += muic/sm/sm5714/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/touchscreen/zinitix/zt7548/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += mstdrv/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += battery/fuelgauge/sm5714_fuelgauge/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += hwmon/sec_thermistor/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += input/sec_input/stm32/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += usb/typec/sm/sm5714/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += battery/charger/sm5714_charger/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += battery/common/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT

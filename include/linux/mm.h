@@ -2167,8 +2167,15 @@ static inline void __free_reserved_page(struct page *page)
 	__free_page(page);
 }
 
+#if defined(CONFIG_MEMBLOCK_MEMSIZE)
+extern int memblock_memsize_late_free(unsigned long ip, struct page *page);
+#else
+static inline int memblock_memsize_late_free(unsigned long ip, struct page *page) { }
+#endif
+
 static inline void free_reserved_page(struct page *page)
 {
+	memblock_memsize_late_free(_RET_IP_, page);
 	__free_reserved_page(page);
 	adjust_managed_page_count(page, 1);
 }
@@ -2296,6 +2303,17 @@ extern int kswapd_threads;
 extern int min_free_kbytes;
 extern int watermark_boost_factor;
 extern int watermark_scale_factor;
+
+/* ion rbin heap.. */
+void wake_ion_rbin_heap_prereclaim(void);
+void wake_ion_rbin_heap_shrink(void);
+
+/* rbincache.c */
+int init_rbincache(unsigned long pfn, unsigned long nr_pages);
+extern unsigned long totalrbin_pages;
+extern atomic_t rbin_allocated_pages;
+extern atomic_t rbin_cached_pages;
+extern atomic_t rbin_pool_pages;
 
 /* nommu.c */
 extern atomic_long_t mmap_pages_allocated;
@@ -2466,10 +2484,20 @@ extern unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info);
 static inline unsigned long
 vm_unmapped_area(struct vm_unmapped_area_info *info)
 {
+	unsigned long addr;
+
 	if (info->flags & VM_UNMAPPED_AREA_TOPDOWN)
-		return unmapped_area_topdown(info);
+		addr = unmapped_area_topdown(info);
 	else
-		return unmapped_area(info);
+		addr = unmapped_area(info);
+
+	if (IS_ERR_VALUE(addr)) {
+		pr_warn_ratelimited("%s err:%ld total_vm:0x%lx flags:0x%lx len:0x%lx low:0x%lx high:0x%lx mask:0x%lx offset:0x%lx\n",
+			__func__, addr, current->mm->total_vm, info->flags,
+			info->length, info->low_limit, info->high_limit,
+			info->align_mask, info->align_offset);
+	}
+	return addr;
 }
 
 /* truncate.c */
@@ -2944,6 +2972,8 @@ static inline void setup_nr_node_ids(void) {}
 #endif
 
 
+extern inline bool need_memory_boosting(void);
+
 #ifdef CONFIG_PROCESS_RECLAIM
 struct reclaim_param {
 	struct vm_area_struct *vma;
@@ -2964,5 +2994,6 @@ extern int proc_reclaim_notifier_register(struct notifier_block *nb);
 extern int proc_reclaim_notifier_unregister(struct notifier_block *nb);
 #endif
 
+extern bool ion_account_print_usage(void);
 #endif /* __KERNEL__ */
 #endif /* _LINUX_MM_H */

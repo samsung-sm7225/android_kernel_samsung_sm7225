@@ -816,6 +816,12 @@ config LEDS_QPNP_VIBRATOR
 	  manually or by the DTEST lines.It uses the android timed-output
 	  framework.
 
+config LEDS_SM5714
+	bool "LED support for the SM5714"
+	depends on LEDS_CLASS
+	help
+	  This option enables support for the LEDs on the SM5714.
+
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"
 

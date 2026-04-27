@@ -197,7 +197,7 @@ static int __sdcardfs_fill_super(
 	}
 
 	pr_info("sdcardfs: dev_name -> %s\n", dev_name);
-	pr_info("sdcardfs: gid=%d,mask=%x\n", mntopts->gid, mntopts->mask);
+	pr_info("sdcardfs: options -> %s\n", (char *)raw_data);
 
 	/* parse lower path */
 	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,

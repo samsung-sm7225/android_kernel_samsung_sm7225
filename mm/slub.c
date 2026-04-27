@@ -1333,6 +1333,30 @@ out:
 
 __setup("slub_debug", setup_slub_debug);
 
+static const char *exclusion_list[] = {
+        "zspage",
+        "zs_handle",
+        "zswap_entry",
+        "avtab_node",
+        "vm_area_struct",
+        "anon_vma_chain",
+        "anon_vma"
+};
+
+static int is_kmem_cache_excluded(const char *str)
+{
+        int i, excluded = 0;
+
+        for (i = 0; i < (int)ARRAY_SIZE(exclusion_list); i++)
+        {
+                if(!strncmp(str, exclusion_list[i], strlen(exclusion_list[i]))) {
+                        excluded = 1;
+                        break;
+                }
+        }
+        return excluded;
+}
+
 slab_flags_t kmem_cache_flags(unsigned int object_size,
 	slab_flags_t flags, const char *name,
 	void (*ctor)(void *))
@@ -1341,8 +1365,12 @@ slab_flags_t kmem_cache_flags(unsigned int object_size,
 	 * Enable debugging if selected on the kernel commandline.
 	 */
 	if (slub_debug && (!slub_debug_slabs || (name &&
-		!strncmp(slub_debug_slabs, name, strlen(slub_debug_slabs)))))
+		!strncmp(slub_debug_slabs, name, strlen(slub_debug_slabs))))) {
 		flags |= slub_debug;
+
+		if (name && is_kmem_cache_excluded(name))
+			flags &= ~SLAB_STORE_USER;
+	}
 
 	return flags;
 }
@@ -5984,8 +6012,8 @@ static int alloc_trace_locations(struct seq_file *seq, struct kmem_cache *s,
 		struct location *l = &t.loc[i];
 
 		seq_printf(seq,
-		"alloc_list: call_site=%pS count=%zu object_size=%zu slab_size=%zu slab_name=%s\n",
-			l->addr, l->count, s->object_size, s->size, s->name);
+		"alloc_list: call_site=%pS count=%lu object_size=%u slab_size=%u slab_name=%s\n",
+			(void *)l->addr, l->count, s->object_size, s->size, s->name);
 	}
 
 	free_loc_track(&t);

@@ -3181,6 +3181,12 @@ static int cam_vfe_bus_update_wm(void *priv, void *cmd_args,
 			return -ENOMEM;
 		}
 
+		if (!update_buf->wm_update->image_buf[i]) {
+			CAM_ERR(CAM_ISP,
+				"invalid image buf address, plane:%d out_type:%d",
+				i, vfe_out_data->out_type);
+			return -ENOMEM;
+		}
 		wm_data = vfe_out_data->wm_res[i]->res_priv;
 		ubwc_client = wm_data->hw_regs->ubwc_regs;
 		/* update width register */

@@ -1871,6 +1871,8 @@ struct ipa3_app_clock_vote {
  * @gsi_fw_file_name: GSI IPA fw file name
  * @uc_fw_file_name: uC IPA fw file name
  */
+#define IPA_PAGE_POOL_SIZE	200
+
 struct ipa3_context {
 	struct ipa3_char_device_context cdev;
 	struct ipa3_ep_context ep[IPA3_MAX_NUM_PIPES];
@@ -2052,6 +2054,10 @@ struct ipa3_context {
 	struct ipa3_app_clock_vote app_clock_vote;
 	char *gsi_fw_file_name;
 	char *uc_fw_file_name;
+
+	struct page *page_pool[IPA_PAGE_POOL_SIZE];
+	int page_pool_idx;
+	spinlock_t page_pool_spinlock;
 };
 
 struct ipa3_plat_drv_res {

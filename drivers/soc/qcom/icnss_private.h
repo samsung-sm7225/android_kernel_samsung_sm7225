@@ -389,6 +389,7 @@ struct icnss_priv {
 	bool is_chain1_supported;
 	bool chain_reg_info_updated;
 	unsigned long device_config;
+	struct kobject *wifi_kobj;
 };
 
 struct icnss_reg_info {

@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include "cam_cci_core.h"
 #include "cam_cci_dev.h"
+#define DUMP_CCI_REGISTERS
 
 static uint32_t cam_cci_retry(struct cci_device *cci_dev,
 	enum cci_i2c_master_t master,
@@ -233,7 +234,7 @@ static void cam_cci_dump_registers(struct cci_device *cci_dev,
 	void __iomem *base = cci_dev->soc_info.reg_map[0].mem_base;
 
 	CAM_INFO(CAM_CCI, "**** CCI:%d register dump ****",
-		cci_dev->soc_info->index);
+		cci_dev->soc_info.index);
 
 	/* CCI Top Registers */
 	CAM_INFO(CAM_CCI, "****CCI TOP Registers ****");
@@ -1694,10 +1695,8 @@ static int32_t cam_cci_read_bytes(struct v4l2_subdev *sd,
 	 * THRESHOLD irq's, we reinit the threshold wait before
 	 * we load the burst read cmd.
 	 */
-	mutex_lock(&cci_dev->cci_master_info[master].mutex_q[QUEUE_1]);
 	reinit_completion(&cci_dev->cci_master_info[master].rd_done);
 	reinit_completion(&cci_dev->cci_master_info[master].th_complete);
-	mutex_unlock(&cci_dev->cci_master_info[master].mutex_q[QUEUE_1]);
 
 	CAM_DBG(CAM_CCI, "Bytes to read %u", read_bytes);
 	do {

@@ -5,8 +5,9 @@
  */
 #include "internal.h"
 #include <linux/pagevec.h>
+#include <linux/mm_inline.h>
 
-struct page *erofs_allocpage(struct list_head *pool, gfp_t gfp)
+struct page *erofs_allocpage(struct list_head *pool, gfp_t gfp, bool nofail)
 {
 	struct page *page;
 
@@ -91,7 +92,7 @@ int erofs_register_workgroup(struct super_block *sb,
 	 * visible to other users in order to avoid potential UAF
 	 * without serialized by workstn_lock.
 	 */
-	__erofs_workgroup_get(grp);
+	__erofs_workgroup_get(grp);	
 
 	err = radix_tree_insert(&sbi->workstn_tree, grp->index, grp);
 	if (err)
@@ -119,7 +120,7 @@ int erofs_workgroup_put(struct erofs_workgroup *grp)
 	if (count == 1)
 		atomic_long_inc(&erofs_global_shrink_cnt);
 	else if (!count)
-		__erofs_workgroup_free(grp);
+		__erofs_workgroup_free(grp);	
 	return count;
 }
 

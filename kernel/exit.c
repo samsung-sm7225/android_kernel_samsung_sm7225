@@ -70,6 +70,8 @@
 #include <linux/pgtable.h>
 #include <asm/mmu_context.h>
 
+#include <linux/sec_debug.h>
+
 /*
  * The default value should be high enough to not crash a system that randomly
  * crashes its kernel from time to time, but low enough to at least not permit
@@ -889,12 +891,15 @@ void __noreturn do_exit(long code)
 	group_dead = atomic_dec_and_test(&tsk->signal->live);
 	if (group_dead) {
 		/*
-		 * If the last thread of global init has exited, panic
-		 * immediately to get a useable coredump.
+		 * If the last thread of global init exit, do panic
+		 * immeddiately to get the coredump to find any clue
+		 * for init task in userspace.
 		 */
-		if (unlikely(is_global_init(tsk)))
-			panic("Attempted to kill init! exitcode=0x%08x\n",
-				tsk->signal->group_exit_code ?: (int)code);
+		if (unlikely(sec_debug_is_enabled())) {
+			if (unlikely(is_global_init(tsk)))
+				panic("Attempted to kill init!! exitcode=0x%08x\n",
+					tsk->signal->group_exit_code ?: (int)code);
+		}
 
 #ifdef CONFIG_POSIX_TIMERS
 		hrtimer_cancel(&tsk->signal->real_timer);

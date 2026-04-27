@@ -26,6 +26,10 @@
 #include "fsmap.h"
 #include <trace/events/ext4.h>
 
+#ifdef CONFIG_FSCRYPT_SDP
+#include <linux/fscrypto_sdp_ioctl.h>
+#endif
+
 /**
  * Swap memory between @a and @b for @len bytes.
  *

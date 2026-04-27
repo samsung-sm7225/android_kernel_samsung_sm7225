@@ -85,6 +85,14 @@ static inline unsigned long __reverse_ffs(unsigned long word)
 	return num;
 }
 
+static inline void update_max_undiscard_blks(struct f2fs_sb_info *sbi)
+{
+	struct discard_cmd_control *dcc = SM_I(sbi)->dcc_info;
+
+	if (dcc->undiscard_blks > sbi->sec_stat.max_undiscard_blks)
+		sbi->sec_stat.max_undiscard_blks = dcc->undiscard_blks;
+}
+
 /*
  * __find_rev_next(_zero)_bit is copied from lib/find_next_bit.c because
  * f2fs_set_bit makes MSB and LSB reversed in a byte.
@@ -941,6 +949,7 @@ static struct discard_cmd *__create_discard_cmd(struct f2fs_sb_info *sbi,
 	dc->bio_ref = 0;
 	atomic_inc(&dcc->discard_cmd_cnt);
 	dcc->undiscard_blks += len;
+	update_max_undiscard_blks(sbi);
 
 	return dc;
 }
@@ -1049,6 +1058,7 @@ static void __check_sit_bitmap(struct f2fs_sb_info *sbi,
 #endif
 }
 
+/* @fs.sec -- cc451a59f2de8918b30cc7c0bef20871 -- */
 static void __init_discard_policy(struct f2fs_sb_info *sbi,
 				struct discard_policy *dpolicy,
 				int discard_type, unsigned int granularity)
@@ -1252,6 +1262,7 @@ static void __punch_discard_cmd(struct f2fs_sb_info *sbi,
 	if (blkaddr > di.lstart) {
 		dc->len = blkaddr - dc->lstart;
 		dcc->undiscard_blks += dc->len;
+		update_max_undiscard_blks(sbi);
 		__relocate_discard_cmd(dcc, dc);
 		modified = true;
 	}
@@ -1267,6 +1278,7 @@ static void __punch_discard_cmd(struct f2fs_sb_info *sbi,
 			dc->len--;
 			dc->start++;
 			dcc->undiscard_blks += dc->len;
+			update_max_undiscard_blks(sbi);
 			__relocate_discard_cmd(dcc, dc);
 		}
 	}
@@ -1329,6 +1341,7 @@ static void __update_discard_tree_range(struct f2fs_sb_info *sbi,
 							max_discard_blocks)) {
 			prev_dc->di.len += di.len;
 			dcc->undiscard_blks += di.len;
+			update_max_undiscard_blks(sbi);
 			__relocate_discard_cmd(dcc, prev_dc);
 			di = prev_dc->di;
 			tdc = prev_dc;
@@ -1343,6 +1356,7 @@ static void __update_discard_tree_range(struct f2fs_sb_info *sbi,
 			next_dc->di.len += di.len;
 			next_dc->di.start = di.start;
 			dcc->undiscard_blks += di.len;
+			update_max_undiscard_blks(sbi);
 			__relocate_discard_cmd(dcc, next_dc);
 			if (tdc)
 				__remove_discard_cmd(sbi, tdc);
@@ -1487,12 +1501,16 @@ retry:
 				f2fs_time_over(sbi, UMOUNT_DISCARD_TIMEOUT))
 				break;
 
+#if 0		
+			// P191203-01534
+			// Always issuing dpolicy->max_reuqsts (8)
+			// Check I/O Idle on discard thread
 			if (dpolicy->io_aware && i < dpolicy->io_aware_gran &&
 						!is_idle(sbi, DISCARD_TIME)) {
 				io_interrupted = true;
 				break;
 			}
-
+#endif
 			__submit_discard_cmd(sbi, dpolicy, dc, &issued);
 
 			if (issued >= dpolicy->max_requests)
@@ -1704,6 +1722,7 @@ static int issue_discard_thread(void *data)
 
 		wait_event_interruptible_timeout(*q,
 				kthread_should_stop() || freezing(current) ||
+				!wait_ms ||
 				dcc->discard_wake,
 				msecs_to_jiffies(wait_ms));
 
@@ -3472,6 +3491,8 @@ void f2fs_do_write_meta_page(struct f2fs_sb_info *sbi, struct page *page,
 		.in_list = false,
 	};
 
+	f2fs_cond_set_fua(&fio);
+
 	if (unlikely(page->index >= MAIN_BLKADDR(sbi)))
 		fio.op_flags &= ~REQ_META;
 
@@ -3540,6 +3561,7 @@ int f2fs_inplace_write_data(struct f2fs_io_info *fio)
 				fio->new_blkaddr, fio->new_blkaddr);
 
 	stat_inc_inplace_blocks(fio->sbi);
+	atomic64_inc(&(sbi->sec_stat.inplace_count));
 
 	if (fio->bio && !(SM_I(sbi)->ipu_policy & (1 << F2FS_IPU_NOCACHE)))
 		err = f2fs_merge_page_bio(fio);
@@ -4179,6 +4201,7 @@ void f2fs_flush_sit_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		unsigned int end = min(start_segno + SIT_ENTRY_PER_BLOCK,
 						(unsigned long)MAIN_SEGS(sbi));
 		unsigned int segno = start_segno;
+		int err = 0;
 
 		if (to_journal &&
 			!__has_cursum_space(journal, ses->entry_cnt, SIT_JOURNAL))
@@ -4216,16 +4239,16 @@ void f2fs_flush_sit_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 							cpu_to_le32(segno);
 				seg_info_to_raw_sit(se,
 					&sit_in_journal(journal, offset));
-				check_block_count(sbi, segno,
+				err = check_block_count(sbi, segno,
 					&sit_in_journal(journal, offset));
 			} else {
 				sit_offset = SIT_ENTRY_OFFSET(sit_i, segno);
 				seg_info_to_raw_sit(se,
 						&raw_sit->entries[sit_offset]);
-				check_block_count(sbi, segno,
+				err = check_block_count(sbi, segno,
 						&raw_sit->entries[sit_offset]);
 			}
-
+			f2fs_bug_on(sbi, err);
 			__clear_bit(segno, bitmap);
 			sit_i->dirty_sentries--;
 			ses->entry_cnt--;
@@ -4464,8 +4487,11 @@ static int build_sit_entries(struct f2fs_sb_info *sbi)
 			f2fs_put_page(page, 1);
 
 			err = check_block_count(sbi, start, &sit);
-			if (err)
+			if (err) {
+				print_block_data(sbi->sb, current_sit_addr(sbi, start),
+						 page_address(page), 0,  F2FS_BLKSIZE);
 				return err;
+			}
 			seg_info_from_raw_sit(se, &sit);
 
 			if (se->type >= NR_PERSISTENT_LOG) {
@@ -4521,8 +4547,11 @@ static int build_sit_entries(struct f2fs_sb_info *sbi)
 		sit_valid_blocks[SE_PAGETYPE(se)] -= old_valid_blocks;
 
 		err = check_block_count(sbi, start, &sit);
-		if (err)
+		if (err) {
+			print_block_data(sbi->sb, 0, (void *)&sit, 0,
+					 sizeof(struct f2fs_sit_entry));
 			break;
+		}
 		seg_info_from_raw_sit(se, &sit);
 
 		if (se->type >= NR_PERSISTENT_LOG) {
@@ -4897,6 +4926,9 @@ static void destroy_victim_secmap(struct f2fs_sb_info *sbi)
 
 	kvfree(dirty_i->pinned_secmap);
 	kvfree(dirty_i->victim_secmap);
+
+	/* W/A for FG_GC failure due to Atomic Write File and Pinned File */
+	kvfree(dirty_i->blacklist_victim_secmap);
 }
 
 static void destroy_dirty_segmap(struct f2fs_sb_info *sbi)

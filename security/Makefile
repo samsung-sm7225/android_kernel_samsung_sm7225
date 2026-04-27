@@ -13,6 +13,7 @@ subdir-$(CONFIG_SECURITY_LOADPIN)	+= loadpin
 subdir-$(CONFIG_SECURITY_SAFESETID)    += safesetid
 subdir-$(CONFIG_SECURITY_LOCKDOWN_LSM)	+= lockdown
 subdir-$(CONFIG_BPF_LSM)		+= bpf
+subdir-$(CONFIG_SECURITY_DEFEX)		+= samsung/defex_lsm
 
 # always enable default capabilities
 obj-y					+= commoncap.o
@@ -30,9 +31,23 @@ obj-$(CONFIG_SECURITY_YAMA)		+= yama/
 obj-$(CONFIG_SECURITY_LOADPIN)		+= loadpin/
 obj-$(CONFIG_SECURITY_SAFESETID)       += safesetid/
 obj-$(CONFIG_SECURITY_LOCKDOWN_LSM)	+= lockdown/
+obj-$(CONFIG_SECURITY_DEFEX)		+= samsung/defex_lsm/built-in.a
 obj-$(CONFIG_CGROUP_DEVICE)		+= device_cgroup.o
 obj-$(CONFIG_BPF_LSM)			+= bpf/
 
 # Object integrity file lists
 subdir-$(CONFIG_INTEGRITY)		+= integrity
 obj-$(CONFIG_INTEGRITY)			+= integrity/
+
+# Knox SDP
+obj-$(CONFIG_SDP) += sdp/
+obj-$(CONFIG_SDP) += sdp/built-in.a
+
+# HDM driver
+obj-$(CONFIG_HDM)			+= hdm/
+
+obj-y += samsung/defex_lsm/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += samsung/proca/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += samsung/proca/gaf/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += samsung/dsms/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-y += samsung/five/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT

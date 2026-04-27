@@ -35,6 +35,7 @@
 #include <linux/hiddev.h>
 #include <linux/hid-debug.h>
 #include <linux/hidraw.h>
+#include <linux/usb/composite.h>
 
 #include "hid-ids.h"
 
@@ -289,8 +290,8 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 	offset = report->size;
 	report->size += parser->global.report_size * parser->global.report_count;
 
-	if (parser->device->ll_driver->max_buffer_size)
-		max_buffer_size = parser->device->ll_driver->max_buffer_size;
+	if (parser->device->ll_driver == &acc_hid_ll_driver)
+		max_buffer_size = USB_COMP_EP0_BUFSIZ;
 
 	/* Total size check: Allow for possible report index byte */
 	if (report->size > (max_buffer_size - 1) << 3) {
@@ -1445,8 +1446,8 @@ static void hid_output_field(const struct hid_device *hid,
 				  field->value[n]);
 	}
 }
-
-/*
+ 
+ /*
  * Compute the size of a report.
  */
 static size_t hid_compute_report_size(struct hid_report *report)
@@ -1591,7 +1592,7 @@ int hid_report_raw_event(struct hid_device *hid, int type, u8 *data, u32 size,
 	struct hid_report_enum *report_enum = hid->report_enum + type;
 	struct hid_report *report;
 	struct hid_driver *hdrv;
-	int max_buffer_size = HID_MAX_BUFFER_SIZE;
+	unsigned int max_buffer_size = HID_MAX_BUFFER_SIZE;
 	unsigned int a;
 	u32 rsize, csize = size;
 	u8 *cdata = data;
@@ -1608,8 +1609,8 @@ int hid_report_raw_event(struct hid_device *hid, int type, u8 *data, u32 size,
 
 	rsize = hid_compute_report_size(report);
 
-	if (hid->ll_driver->max_buffer_size)
-		max_buffer_size = hid->ll_driver->max_buffer_size;
+	if (hid->ll_driver == &acc_hid_ll_driver)
+		max_buffer_size = USB_COMP_EP0_BUFSIZ;
 
 	if (report_enum->numbered && rsize >= max_buffer_size)
 		rsize = max_buffer_size - 1;

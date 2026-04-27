@@ -213,6 +213,7 @@ int cam_mem_get_io_buf(int32_t buf_handle, int32_t mmu_handle,
 	dma_addr_t *iova_ptr, size_t *len_ptr)
 {
 	int rc = 0, idx;
+	struct timespec64 ts;
 
 	*len_ptr = 0;
 
@@ -225,8 +226,14 @@ int cam_mem_get_io_buf(int32_t buf_handle, int32_t mmu_handle,
 	if (idx >= CAM_MEM_BUFQ_MAX || idx <= 0)
 		return -ENOENT;
 
-	if (!tbl.bufq[idx].active)
+	if (!tbl.bufq[idx].active) {
+		ts = ktime_to_timespec64(tbl.bufq[idx].unmap_time);
+		CAM_ERR(CAM_MEM,
+			"Buffer at idx=%d is already unmapped, vaddr 0x%x unmaped_vaddr 0x%x unmaped time: %ld:%06ld",
+			idx, tbl.bufq[idx].vaddr, tbl.bufq[idx].unmaped_vaddr,
+			ts.tv_sec, ts.tv_nsec/NSEC_PER_USEC);
 		return -EAGAIN;
+	}
 
 	mutex_lock(&tbl.bufq[idx].q_lock);
 	if (buf_handle != tbl.bufq[idx].buf_handle) {
@@ -384,6 +391,53 @@ end:
 	return rc;
 }
 EXPORT_SYMBOL(cam_mem_mgr_cache_ops);
+
+int cam_mem_put_cpu_buf(int32_t buf_handle)
+{
+	int rc = 0;
+	int idx;
+	struct dma_buf *dmabuf = NULL;
+
+	if (!atomic_read(&cam_mem_mgr_state)) {
+		CAM_ERR(CAM_MEM, "failed. mem_mgr not initialized");
+		return -EINVAL;
+	}
+
+	if (!buf_handle)
+		return -EINVAL;
+
+	idx = CAM_MEM_MGR_GET_HDL_IDX(buf_handle);
+	if (idx >= CAM_MEM_BUFQ_MAX || idx <= 0)
+		return -EINVAL;
+
+	if (!tbl.bufq[idx].active)
+		return -EPERM;
+
+	if (buf_handle != tbl.bufq[idx].buf_handle)
+		return -EINVAL;
+
+	dmabuf = tbl.bufq[idx].dma_buf;
+	if (!dmabuf) {
+		CAM_ERR(CAM_CRM, "Invalid DMA buffer pointer");
+		return -EINVAL;
+	}
+
+	if ((tbl.bufq[idx].flags & CAM_MEM_FLAG_KMD_ACCESS) &&
+		(tbl.bufq[idx].kmdvaddr)) {
+		rc = dma_buf_end_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
+		if (rc) {
+			CAM_ERR(CAM_MEM, "dma begin access failed rc=%d", rc);
+			return rc;
+		}
+	} else {
+		CAM_ERR(CAM_MEM, "Invalid buf flag");
+		rc = -EINVAL;
+	}
+
+	return rc;
+}
+EXPORT_SYMBOL(cam_mem_put_cpu_buf);
+
 
 static int cam_mem_util_get_dma_buf(size_t len,
 	unsigned int heap_id_mask,
@@ -657,7 +711,6 @@ int cam_mem_mgr_alloc_and_map(struct cam_mem_mgr_alloc_cmd *cmd)
 		goto slot_fail;
 	}
 
-	mutex_lock(&tbl.m_lock);
 	if ((cmd->flags & CAM_MEM_FLAG_HW_READ_WRITE) ||
 		(cmd->flags & CAM_MEM_FLAG_HW_SHARED_ACCESS) ||
 		(cmd->flags & CAM_MEM_FLAG_PROTECTED_MODE)) {
@@ -687,11 +740,10 @@ int cam_mem_mgr_alloc_and_map(struct cam_mem_mgr_alloc_cmd *cmd)
 				"Failed in map_hw_va, len=%llu, flags=0x%x, fd=%d, region=%d, num_hdl=%d, rc=%d",
 				len, cmd->flags, fd, region,
 				cmd->num_hdl, rc);
-			mutex_unlock(&tbl.m_lock);
 			goto map_hw_fail;
 		}
 	}
-	mutex_unlock(&tbl.m_lock);
+
 	mutex_lock(&tbl.bufq[idx].q_lock);
 	tbl.bufq[idx].fd = fd;
 	tbl.bufq[idx].dma_buf = NULL;
@@ -711,6 +763,8 @@ int cam_mem_mgr_alloc_and_map(struct cam_mem_mgr_alloc_cmd *cmd)
 
 	tbl.bufq[idx].kmdvaddr = kvaddr;
 	tbl.bufq[idx].vaddr = hw_vaddr;
+	tbl.bufq[idx].unmaped_vaddr = 0;
+	tbl.bufq[idx].unmap_time = 0;
 	tbl.bufq[idx].dma_buf = dmabuf;
 	tbl.bufq[idx].len = len;
 	tbl.bufq[idx].num_hdl = cmd->num_hdl;
@@ -782,7 +836,6 @@ int cam_mem_mgr_map(struct cam_mem_mgr_map_cmd *cmd)
 		return -EINVAL;
 	}
 
-	mutex_lock(&tbl.m_lock);
 	if ((cmd->flags & CAM_MEM_FLAG_HW_READ_WRITE) ||
 		(cmd->flags & CAM_MEM_FLAG_PROTECTED_MODE)) {
 		rc = cam_mem_util_map_hw_va(cmd->flags,
@@ -797,11 +850,9 @@ int cam_mem_mgr_map(struct cam_mem_mgr_map_cmd *cmd)
 				"Failed in map_hw_va, flags=0x%x, fd=%d, region=%d, num_hdl=%d, rc=%d",
 				cmd->flags, cmd->fd, CAM_SMMU_REGION_IO,
 				cmd->num_hdl, rc);
-			mutex_unlock(&tbl.m_lock);
 			goto map_fail;
 		}
 	}
-	mutex_unlock(&tbl.m_lock);
 
 	idx = cam_mem_get_slot();
 	if (idx < 0) {
@@ -818,10 +869,13 @@ int cam_mem_mgr_map(struct cam_mem_mgr_map_cmd *cmd)
 		CAM_MEM_MGR_SET_SECURE_HDL(tbl.bufq[idx].buf_handle, true);
 	tbl.bufq[idx].kmdvaddr = 0;
 
-	if (cmd->num_hdl > 0)
+	if (cmd->num_hdl > 0) {
 		tbl.bufq[idx].vaddr = hw_vaddr;
-	else
+		tbl.bufq[idx].unmaped_vaddr = 0;
+		tbl.bufq[idx].unmap_time = 0;
+	} else {
 		tbl.bufq[idx].vaddr = 0;
+	}
 
 	tbl.bufq[idx].dma_buf = dmabuf;
 	tbl.bufq[idx].len = len;
@@ -953,6 +1007,8 @@ static int cam_mem_mgr_cleanup_table(void)
 		tbl.bufq[i].flags = 0;
 		tbl.bufq[i].buf_handle = -1;
 		tbl.bufq[i].vaddr = 0;
+		tbl.bufq[i].unmaped_vaddr = 0;
+		tbl.bufq[i].unmap_time = 0;
 		tbl.bufq[i].len = 0;
 		memset(tbl.bufq[i].hdls, 0,
 			sizeof(int32_t) * tbl.bufq[i].num_hdl);
@@ -1047,6 +1103,8 @@ static void cam_mem_util_unmap(int32_t idx)
 	mutex_lock(&tbl.bufq[idx].q_lock);
 	tbl.bufq[idx].flags = 0;
 	tbl.bufq[idx].buf_handle = -1;
+	tbl.bufq[idx].unmaped_vaddr = tbl.bufq[idx].vaddr;
+	tbl.bufq[idx].unmap_time = ktime_get();
 	tbl.bufq[idx].vaddr = 0;
 	memset(tbl.bufq[idx].hdls, 0,
 		sizeof(int32_t) * CAM_MEM_MMU_MAX_HANDLE);
@@ -1314,6 +1372,8 @@ int cam_mem_mgr_request_mem(struct cam_mem_mgr_request_desc *inp,
 	tbl.bufq[idx].kmdvaddr = kvaddr;
 
 	tbl.bufq[idx].vaddr = iova;
+	tbl.bufq[idx].unmaped_vaddr = 0;
+	tbl.bufq[idx].unmap_time = 0;
 
 	tbl.bufq[idx].len = inp->size;
 	tbl.bufq[idx].num_hdl = num_hdl;
@@ -1469,6 +1529,8 @@ int cam_mem_mgr_reserve_memory_region(struct cam_mem_mgr_request_desc *inp,
 	tbl.bufq[idx].kmdvaddr = 0;
 
 	tbl.bufq[idx].vaddr = iova;
+	tbl.bufq[idx].unmaped_vaddr = 0;
+	tbl.bufq[idx].unmap_time = 0;
 
 	tbl.bufq[idx].len = request_len;
 	tbl.bufq[idx].num_hdl = num_hdl;
