@@ -386,7 +386,7 @@ static void mem_entry_destroy(struct kgsl_mem_entry *entry)
 
 	switch (memtype) {
 	case KGSL_MEM_ENTRY_ION:
-		kgsl_destroy_ion(entry->priv_data);
+		kgsl_destroy_ion(&entry->memdesc);
 		break;
 	default:
 		break;
@@ -3183,7 +3183,7 @@ long kgsl_ioctl_gpuobj_import(struct kgsl_device_private *dev_priv,
 
 unmap:
 	if (kgsl_memdesc_usermem_type(&entry->memdesc) == KGSL_MEM_ENTRY_ION) {
-		kgsl_destroy_ion(entry->priv_data);
+		kgsl_destroy_ion(&entry->memdesc);
 		entry->memdesc.sgt = NULL;
 	}
 
@@ -3498,7 +3498,7 @@ long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 error_attach:
 	switch (kgsl_memdesc_usermem_type(&entry->memdesc)) {
 	case KGSL_MEM_ENTRY_ION:
-		kgsl_destroy_ion(entry->priv_data);
+		kgsl_destroy_ion(&entry->memdesc);
 		entry->memdesc.sgt = NULL;
 		break;
 	default:
